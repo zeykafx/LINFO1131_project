@@ -3,6 +3,7 @@ import
 	Input
 	OS
 	System
+	Number
 export
 	portPlayer:StartPlayer
 define
@@ -39,6 +40,14 @@ define
 
 	% Helper functions
 	RandomInRange = fun {$ Min Max} Min+({OS.rand}mod(Max-Min+1)) end
+
+	SimulatedThinking = proc{$} {Delay ({OS.rand} mod (Input.thinkMax - Input.thinkMin) + Input.thinkMin)} end
+
+
+	% The distance between two points measured along axes at right angles. In a plane with p1 at (x1, y1) and p2 at (x2, y2), it is |x1 - x2| + |y1 - y2|. 
+	fun {ManhattanDistance P1 P2}
+		{Number.abs (P1.x - P2.x)} + {Number.abs (P1.y - P2.y)}
+	end
 in
 	fun {StartPlayer Color ID}
 		Stream
@@ -95,6 +104,7 @@ in
 	%%%% TODO Message functions
 
 	fun {InitPosition State ?ID ?Position}
+		{SimulatedThinking}
 		ID = State.id
 		Position = State.startPosition
 		State
@@ -121,6 +131,8 @@ in
 	end
 
 	fun {ChargeItem State ?ID ?Kind} 
+		{SimulatedThinking}
+
 		ID = State.id
 		Kind = null
 		State
@@ -153,12 +165,16 @@ in
     end
 
 	fun {TakeFlag State ?ID ?Flag}
+		{SimulatedThinking}
+
 		ID = State.id
 		Flag = null
 		State
 	end
 			
 	fun {DropFlag State ?ID ?Flag}
+		{SimulatedThinking}
+
 		ID = State.id
 		Flag = null
 		State

@@ -15,38 +15,29 @@ else
 endif
 
 # TODO: Change these parameters as you wish
+INPUT := "Input.oz"
 PLAYER1 = "PlayerBasic.oz"
 PLAYER2 = "PlayerBasic.oz"
 
 
 all: compileAll run
 
-run:
-	$(OZENGINE) Main.ozf
-
-.PHONY: clean
-
-clean:
-	rm *.ozf
-
-
 compileAll: Input.ozf players PlayerManager.ozf GUI.ozf Main.ozf
 
-# Rules used to compile files independently from each other
+# Compiles all .oz files into .ozf files
+%.ozf: %.oz
+	$(OZC) -c $^
 
-Input.ozf: Input.oz
-	$(OZC) -c Input.oz -o "Input.ozf"
-
+# overrides the previous rules for the players
+# TODO: remove this when we have the two players created
 players:
 	$(OZC) -c ${PLAYER1} -o "Player1.ozf"
 	$(OZC) -c ${PLAYER2} -o "Player2.ozf"
 
-PlayerManager.ozf: PlayerManager.oz
-	$(OZC) -c PlayerManager.oz
-	
-GUI.ozf: GUI.oz
-	$(OZC) -c GUI.oz
+run:
+	$(OZENGINE) Main.ozf
 
-Main.ozf: Main.oz
-	$(OZC) -c Main.oz
+clean:
+	rm *.ozf
 
+.PHONY: clean

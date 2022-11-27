@@ -36,7 +36,8 @@ in
 
 	proc {PlayTurn PlayerPort ID State TurnStep}
 
-		{SimulatedThinking}
+		% TODO: idk if this should be here or in the player functions
+		% {SimulatedThinking}
 
 		case TurnStep
 		of nil then skip
@@ -123,7 +124,7 @@ in
 			{Send WindowPort initSoldier(ID Position)} % draws the player #ID at position Position
 			{Send WindowPort lifeUpdate(ID Input.startHealth)}
 			thread
-			 	{Main Port ID state(mines:nil flags:Input.flags)} % start the game loop for player #ID
+			 	{Main Port ID state(mines:nil flags:Input.flags position:Position)} % start the game loop for player #ID
 			end
 			{InitThreadForAll Next}
 		end
