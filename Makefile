@@ -1,6 +1,6 @@
 # ----------------------------
 # TODO: Fill your group number, your NOMAs and your names
-# group number X
+# group number 60
 # 47142000 : Hugo Delporte 
 # 60672000 : Corentin Detry
 # ----------------------------
