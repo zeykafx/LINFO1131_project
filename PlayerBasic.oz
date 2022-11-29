@@ -67,6 +67,7 @@ in
 					gunReloads:0
 					startPosition:{List.nth Input.spawnPoints ID}
 					% TODO You can add more elements if you need it
+					playersState:nil % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
 		end
@@ -103,6 +104,18 @@ in
 
 	%%%% TODO Message functions
 
+	fun {StateModification State WantedID Function}
+		case State
+		of nil then nil
+		[] playerState(id:ID position:_ hp:_ mineReload:_ gunReload:_ flag:_)|Next then
+			if (ID == WantedID) then
+				{Function State.1}|Next
+			else 
+				State.1|{StateModification Next WantedID Function}
+			end
+		end
+	end
+
 	fun {InitPosition State ?ID ?Position}
 		{SimulatedThinking}
 		ID = State.id
@@ -115,7 +128,14 @@ in
 	end
 
 	fun {SayMoved State ID Position}
-		State
+		fun {ModPos}
+			playerState(id:ID position:_ hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
+		in
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
+		end
+	in
+		{System.show playerMoved(ID Position)}
+		{StateModification State ID ModPos}
 	end
 
 	fun {SayMineExplode State Mine}

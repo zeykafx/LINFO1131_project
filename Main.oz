@@ -36,14 +36,11 @@ in
 
 	proc {PlayTurn PlayerPort ID State TurnStep}
 
-		% TODO: idk if this should be here or in the player functions
-		% {SimulatedThinking}
-
 		case TurnStep
 		of nil then skip
 		[] step1 then
 			{System.show step1#ID}
-			% player is dead, wait for RespawnDelay and send respawn() to the player, the player will set its local state's hp to startHp 
+			% if the player is dead, wait for RespawnDelay and send respawn() to the player, the player will set its local state's hp to startHp 
 			% and start playing again. Update the main's state for that player to set its health to startHp
 			{PlayTurn PlayerPort ID State step2}
 
@@ -124,7 +121,7 @@ in
 			{Send WindowPort initSoldier(ID Position)} % draws the player #ID at position Position
 			{Send WindowPort lifeUpdate(ID Input.startHealth)}
 			thread
-			 	{Main Port ID state(mines:nil flags:Input.flags position:Position)} % start the game loop for player #ID
+			 	{Main Port ID state(mines:nil flags:Input.flags)} % start the game loop for player #ID
 			end
 			{InitThreadForAll Next}
 		end
