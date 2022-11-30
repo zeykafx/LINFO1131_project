@@ -14,6 +14,7 @@ define
 	Main
 	WindowPort
 	PlayTurn
+	InitPlayersState
 
 	proc {DrawFlags Flags Port}
 		case Flags of nil then skip 
@@ -34,6 +35,20 @@ in
 
 	SimulatedThinking = proc{$} {Delay ({OS.rand} mod (Input.thinkMax - Input.thinkMin) + Input.thinkMin)} end
 
+	% send a message to all players
+	proc {SendToAll Message} 
+		for player(_ Port) in PlayersPorts do
+			{Send Port Message}
+		end
+		% for Id in {1..Input.nbPlayer} do
+		% 	if {List.nth State.playersState Id}.hp /= 0 then
+		% 		{Send {List.nth PlayersPorts Id} Message}
+		% 	else 
+		% 		skip
+		% 	end
+		% end
+	end
+
 	proc {PlayTurn PlayerPort ID State TurnStep}
 
 		case TurnStep
@@ -42,6 +57,8 @@ in
 			{System.show step1#ID}
 			% if the player is dead, wait for RespawnDelay and send respawn() to the player, the player will set its local state's hp to startHp 
 			% and start playing again. Update the main's state for that player to set its health to startHp
+			% {SendToAll sayMoved(ID pt(x:1 y:1))} % for testing
+			
 			{PlayTurn PlayerPort ID State step2}
 
 		[] step2 then
@@ -100,6 +117,9 @@ in
 
 	% this is the main loop for each thread
 	proc {Main Port ID State}
+
+		{Wait ID}
+
 		{System.show startOfLoop(ID)}
 
 
@@ -122,9 +142,17 @@ in
 			{Send WindowPort initSoldier(ID Position)} % draws the player #ID at position Position
 			{Send WindowPort lifeUpdate(ID Input.startHealth)}
 			thread
-			 	{Main Port ID state(mines:nil flags:Input.flags)} % start the game loop for player #ID
+			 	{Main Port ID state(mines:nil flags:Input.flags playersState:{InitPlayersState 1 nil})} % start the game loop for player #ID
 			end
 			{InitThreadForAll Next}
+		end
+	end
+
+	fun {InitPlayersState ID Acc}
+		if ID > Input.nbPlayer then
+			Acc
+		else
+			{InitPlayersState ID+1 playerState(id:ID position:{List.nth Input.spawnPoints ID} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|Acc}
 		end
 	end
 

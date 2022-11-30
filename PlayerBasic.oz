@@ -37,7 +37,7 @@ define
 	SayShoot
 	TakeFlag
 	DropFlag
-	StateModification
+	PlayerStateModification
 	InitOtherPlayers
 
 	% Helper functions
@@ -51,11 +51,11 @@ define
 		{Number.abs (P1.x - P2.x)} + {Number.abs (P1.y - P2.y)}
 	end
 in
-	fun {InitOtherPlayers ID Acc}
-		if ID > Input.nbPlayer then
-			Acc
+	fun {InitOtherPlayers Nbr}
+		if Nbr > Input.nbPlayer then
+			nil
 		else
-			{InitOtherPlayers ID+1 playerState(id:ID position:{List.nth Input.spawnPoints ID} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|Acc}
+			playerState(id:Nbr position:{List.nth Input.spawnPoints Nbr} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|{InitOtherPlayers Nbr+1}
 		end
 	end
 
@@ -77,7 +77,7 @@ in
 					gunReloads:0
 					startPosition:{List.nth Input.spawnPoints ID}
 					% TODO You can add more elements if you need it
-					playersState:{InitOtherPlayers 1 nil} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
+					playersState:{InitOtherPlayers 1} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
 		end
@@ -85,7 +85,9 @@ in
 	end
 
     proc{TreatStream Stream State}
+		% TODO:remove
 		{System.show State}
+
         case Stream
             of H|T then {TreatStream T {MatchHead H State}}
         end
@@ -115,14 +117,14 @@ in
 
 	%%%% TODO Message functions
 
-	fun {StateModification State WantedID Function}
-		case State
+	fun {PlayerStateModification PlayersState WantedID Function}
+		case PlayersState
 		of nil then nil
-		[] playerState(id:ID position:_ hp:_ mineReload:_ gunReload:_ flag:_)|Next then
+		[] playerState(id:ID position:_ hp:_ mineReload:_ gunReload:_ flag:_)|T then
 			if (ID == WantedID) then
-				{Function State.1}|Next
+				{Function PlayersState.1}|T
 			else 
-				State.1|{StateModification Next WantedID Function}
+				PlayersState.1|{PlayerStateModification T WantedID Function}
 			end
 		end
 	end
@@ -139,14 +141,19 @@ in
 	end
 
 	fun {SayMoved State ID Position}
-		fun {ModPos}
-			playerState(id:ID position:OldPosition hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = State
+		% modifies the position inside the playersState list
+		fun {ModPos PlayerState}
+			ID OldPosition HP MineReload GunReload Flag
 		in
+			playerState(id:ID position:OldPosition hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
 		end
+		AdjoinedState
 	in
 		{System.show playerMoved(ID Position)}
-		{StateModification State ID ModPos}
+		% this returns a modified version of State where the playerState list in State (record) is replaced with the updated state 
+		AdjoinedState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModPos}}
+		AdjoinedState
 	end
 
 	fun {SayMineExplode State Mine}
