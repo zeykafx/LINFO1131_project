@@ -37,6 +37,8 @@ define
 	SayShoot
 	TakeFlag
 	DropFlag
+	StateModification
+	InitOtherPlayers
 
 	% Helper functions
 	RandomInRange = fun {$ Min Max} Min+({OS.rand}mod(Max-Min+1)) end
@@ -49,6 +51,14 @@ define
 		{Number.abs (P1.x - P2.x)} + {Number.abs (P1.y - P2.y)}
 	end
 in
+	fun {InitOtherPlayers ID Acc}
+		if ID > Input.nbPlayer then
+			Acc
+		else
+			{InitOtherPlayers ID+1 playerState(id:ID position:{List.nth Input.spawnPoints ID} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|Acc}
+		end
+	end
+
 	fun {StartPlayer Color ID}
 		Stream
 		Port
@@ -67,7 +77,7 @@ in
 					gunReloads:0
 					startPosition:{List.nth Input.spawnPoints ID}
 					% TODO You can add more elements if you need it
-					playersState:nil % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
+					playersState:{InitOtherPlayers 1 nil} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
 		end
@@ -75,6 +85,7 @@ in
 	end
 
     proc{TreatStream Stream State}
+		{System.show State}
         case Stream
             of H|T then {TreatStream T {MatchHead H State}}
         end
@@ -129,7 +140,7 @@ in
 
 	fun {SayMoved State ID Position}
 		fun {ModPos}
-			playerState(id:ID position:_ hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
+			playerState(id:ID position:OldPosition hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = State
 		in
 			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
 		end

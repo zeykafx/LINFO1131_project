@@ -108,6 +108,7 @@ in
 		{PlayTurn Port ID State step1}
 
 		{System.show endOfLoop(ID)}
+		{Delay 500}
 		{Main Port ID State}
 	end
 
