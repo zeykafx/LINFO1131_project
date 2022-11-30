@@ -39,6 +39,8 @@ define
 	DropFlag
 	PlayerStateModification
 	InitOtherPlayers
+	Respawn
+	SayRespawn
 
 	% Helper functions
 	RandomInRange = fun {$ Min Max} Min+({OS.rand}mod(Max-Min+1)) end
@@ -71,6 +73,7 @@ in
 					id:id(name:basic color:Color id:ID)
 					position:{List.nth Input.spawnPoints ID}
 					map:Input.map
+					food:nil
 					hp:Input.startHealth
 					flag:null
 					mineReloads:0
@@ -112,6 +115,8 @@ in
 			[] dropFlag(?ID ?Flag) then {DropFlag State ID Flag}
 			[] sayFlagTaken(ID Flag) then {SayFlagTaken State ID Flag}
 			[] sayFlagDropped(ID Flag) then {SayFlagDropped State ID flag}
+			[] respawn() then {Respawn State}
+			[] sayRespawn(ID) then {SayRespawn State ID}
         end
     end
 
@@ -148,12 +153,11 @@ in
 			playerState(id:ID position:OldPosition hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
 		end
-		AdjoinedState
+		
 	in
 		{System.show playerMoved(ID Position)}
 		% this returns a modified version of State where the playerState list in State (record) is replaced with the updated state 
-		AdjoinedState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModPos}}
-		AdjoinedState
+		{AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModPos}}
 	end
 
 	fun {SayMineExplode State Mine}
@@ -195,7 +199,13 @@ in
 	end
 
 	fun {SayDeath State ID}
-		State
+		fun {ModDeath PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+		in
+			playerState(id:ID position:Position hp:0 mineReload:MineReload gunReload:GunReload flag:Flag)
+		end 
+	in
+		{AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModDeath}}
 	end
 
 	fun {SayDamageTaken State ID Damage LifeLeft}
@@ -224,5 +234,27 @@ in
 
 	fun {SayFlagDropped State ID Flag}
 		State
+	end
+
+	fun {Respawn State}
+		fun {ModHp PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+		in
+			playerState(id:ID position:Position hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
+		end
+		NewState 
+	in
+		NewState = {AdjoinAt State hp Input.startHealth}
+		{AdjoinAt NewState playersState {PlayerStateModification NewState.playersState NewState.id.id ModHp}}
+	end
+
+	fun {SayRespawn State ID}
+		fun {ModHp PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+		in
+			playerState(id:ID position:Position hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
+		end 
+	in
+		{AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModHp}}
 	end
 end

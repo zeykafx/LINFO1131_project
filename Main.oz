@@ -15,6 +15,7 @@ define
 	WindowPort
 	PlayTurn
 	InitPlayersState
+	PlayerStateModification
 
 	proc {DrawFlags Flags Port}
 		case Flags of nil then skip 
@@ -36,30 +37,61 @@ in
 	SimulatedThinking = proc{$} {Delay ({OS.rand} mod (Input.thinkMax - Input.thinkMin) + Input.thinkMin)} end
 
 	% send a message to all players
-	proc {SendToAll Message} 
-		for player(_ Port) in PlayersPorts do
-			{Send Port Message}
+	proc {SendToAll Message State} 
+		for Id in 1..Input.nbPlayer do
+			if {List.nth State.playersState Id}.hp \= 0 then
+				{Send {List.nth PlayersPorts Id}.2 Message}
+			else 
+				skip
+			end
 		end
-		% for Id in {1..Input.nbPlayer} do
-		% 	if {List.nth State.playersState Id}.hp /= 0 then
-		% 		{Send {List.nth PlayersPorts Id} Message}
-		% 	else 
-		% 		skip
-		% 	end
-		% end
 	end
 
-	proc {PlayTurn PlayerPort ID State TurnStep}
+	fun {PlayTurn PlayerPort ID State TurnStep}
 
 		case TurnStep
-		of nil then skip
+		of nil then nil
 		[] step1 then
-			{System.show step1#ID}
 			% if the player is dead, wait for RespawnDelay and send respawn() to the player, the player will set its local state's hp to startHp 
 			% and start playing again. Update the main's state for that player to set its health to startHp
-			% {SendToAll sayMoved(ID pt(x:1 y:1))} % for testing
+
+			NewState
+			% function that modifies the hp of player ID in the state list
+			fun {ModHp PlayerState}
+				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			in
+				playerState(id:ID position:Position hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
+			end 
+		in
+			{System.show step1#ID}
+
+			% if the player is dead, then update the GUI and send to all players that player#ID is dead
+			% wait for respawnDelay and then set the player's life count back to startHealth, 
+			% reset the player's position and broadcast that player#ID is alive with startHealth HP
+			if {List.nth State.playersState ID.id}.hp == 0 then
+				{System.show ID#isDead}
+
+				% set the life to 0 on the gui, and then remove the soldier from the map
+				{Send WindowPort lifeUpdate(ID 0)}
+				{Send WindowPort removeSoldier(ID)}
+				% broadcast that player#ID is dead
+				{SendToAll sayDeath(ID) State}
+
+				{Delay Input.respawnDelay}
+
+				% make the player respawn and then broadcast that 
+				{Send PlayerPort respawn()}
+				{SendToAll sayRespawn(ID) State}
+
+				% reset the position of the player
+				{Send WindowPort initSoldier(ID {List.nth Input.spawnPoints ID.id})}
+				{Send WindowPort lifeUpdate(ID Input.startHealth)}
+				NewState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModHp}}
+			else
+				NewState = State
+			end
 			
-			{PlayTurn PlayerPort ID State step2}
+			{PlayTurn PlayerPort ID NewState step2}
 
 		[] step2 then
 			{System.show step2#ID}
@@ -111,13 +143,14 @@ in
 			{System.show step10#ID}
 			% The game Controller is also responsible for spawning food randomly on the map after a random time
 			% between FoodDelayMin and FoodDelayMin has passed
-			skip
+			State
 		end
 	end
 
 	% this is the main loop for each thread
 	proc {Main Port ID State}
-
+		NewState
+	in
 		{Wait ID}
 
 		{System.show startOfLoop(ID)}
@@ -125,11 +158,13 @@ in
 
 		%%%% TODO Insert your code here
 		% communicate with the players by sending a message with unbound variables and then waiting on those variables to get the answer
-		{PlayTurn Port ID State step1}
+		NewState = {PlayTurn Port ID State step1}
 
 		{System.show endOfLoop(ID)}
-		{Delay 500}
-		{Main Port ID State}
+
+		{Delay 500} % added a delay to make the GUI respond faster
+
+		{Main Port ID NewState}
 	end
 
 	proc {InitThreadForAll Players}
@@ -142,17 +177,31 @@ in
 			{Send WindowPort initSoldier(ID Position)} % draws the player #ID at position Position
 			{Send WindowPort lifeUpdate(ID Input.startHealth)}
 			thread
-			 	{Main Port ID state(mines:nil flags:Input.flags playersState:{InitPlayersState 1 nil})} % start the game loop for player #ID
+			 	{Main Port ID state(mines:nil flags:Input.flags playersState:{InitPlayersState 1})} % start the game loop for player #ID
 			end
 			{InitThreadForAll Next}
 		end
 	end
 
-	fun {InitPlayersState ID Acc}
-		if ID > Input.nbPlayer then
-			Acc
+	% InitPlayersState creates the state for all the players, returns a list of playerState tuples that contain ID, HP, Pos, Reloads, flag,...
+	fun {InitPlayersState Nbr}
+		if Nbr > Input.nbPlayer then
+			nil
 		else
-			{InitPlayersState ID+1 playerState(id:ID position:{List.nth Input.spawnPoints ID} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|Acc}
+			playerState(id:Nbr position:{List.nth Input.spawnPoints Nbr} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|{InitPlayersState Nbr+1}
+		end
+	end
+
+	% PlayerStateModification is used to apply a function on PlayerState for a specific ID, it returns the modified state
+	fun {PlayerStateModification PlayersState WantedID Function}
+		case PlayersState
+		of nil then nil
+		[] playerState(id:ID position:_ hp:_ mineReload:_ gunReload:_ flag:_)|T then
+			if (ID == WantedID) then
+				{Function PlayersState.1}|T
+			else 
+				PlayersState.1|{PlayerStateModification T WantedID Function}
+			end
 		end
 	end
 
