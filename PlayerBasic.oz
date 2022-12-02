@@ -88,8 +88,7 @@ in
 	end
 
     proc{TreatStream Stream State}
-		% TODO:remove
-		{System.show State}
+		% {System.show State}
 
         case Stream
             of H|T then {TreatStream T {MatchHead H State}}
@@ -142,10 +141,20 @@ in
 	end
 
 	fun {Move State ?ID ?Position}
-		State	
+		Pos
+	in
+		ID = State.id
+		% TODO: remove this and replace with proper movements lol
+		% for example
+		% change State.position.x to something else, assign that to State.position and assign the new state to NewState, return that new state
+		% NewState = {AdjoinAt State position {AdjoinAt State.position x if State.id.color == red then State.position.x+1 else State.position.x-1 end}}
+		Pos = State.position
+		Position = {AdjoinAt Pos x if State.id.color == red then State.position.x+1 else State.position.x-1 end}
+		State
 	end
 
 	fun {SayMoved State ID Position}
+		NewState
 		% modifies the position inside the playersState list
 		fun {ModPos PlayerState}
 			ID OldPosition HP MineReload GunReload Flag
@@ -155,9 +164,15 @@ in
 		end
 		
 	in
-		{System.show playerMoved(ID Position)}
+		% if the player that moved is the the current player, then also change the position in the state
+		if ID == State.id then
+			NewState = {AdjoinAt State position Position}
+		else
+			NewState = State
+		end
+
 		% this returns a modified version of State where the playerState list in State (record) is replaced with the updated state 
-		{AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModPos}}
+		{AdjoinAt NewState playersState {PlayerStateModification State.playersState ID.id ModPos}}
 	end
 
 	fun {SayMineExplode State Mine}

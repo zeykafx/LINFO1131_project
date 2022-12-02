@@ -91,25 +91,62 @@ in
 				NewState = State
 			end
 			
-			{PlayTurn PlayerPort ID NewState step2}
+			{PlayTurn PlayerPort ID NewState step234}
 
-		[] step2 then
-			{System.show step2#ID}
-			% if the player is alive ask where it wants to go
-			{PlayTurn PlayerPort ID State step3}
-
-		[] step3 then
-			{System.show step3#ID}
-			% check if the position the player wants to move to is a valid move, if it is not, the position stays the same,
+		[] step234 then
+			NewPos PlayerID PlayerState EnemyBaseTileNbr NewPosMapTileNbr NewState
+			fun {ModPos PlayerState}
+				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			in
+				playerState(id:ID position:NewPos hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
+			end 
+		in
+			{System.show step234#ID}
+		
+			% STEP 2: if the player is alive ask where it wants to go
+			{Send PlayerPort move(PlayerID NewPos)}
+			{Wait PlayerID}
+			{Wait NewPos}
+			
+			% STEP 3: check if the position the player wants to move to is a valid move, if it is not, the position stays the same,
 			% otherwise notify everyone of the player's new position
-			{PlayTurn PlayerPort ID State step4}
+			
+			PlayerState = {List.nth State.playersState ID.id}
 
-		[] step4 then
-			{System.show step4#ID}
-			% check if the player has moved on a mine
+			% walls (3) and enemy base are impenetrable, player 1 is red (1) and player 2 is blue (2)
+			if ID.color == red then EnemyBaseTileNbr = 2 else EnemyBaseTileNbr = 1 end 
+			
+			% check that the position is in the map
+			if (NewPos.x =< Input.nRow) andthen (NewPos.y =< Input.nColumn) andthen (NewPos.x > 0) andthen (NewPos.y > 0) then
+				NewPosMapTileNbr = {List.nth {List.nth Input.map NewPos.x} NewPos.y}
+
+	
+				if {Abs (PlayerState.position.x - NewPos.x)} =< 1 andthen {Abs (PlayerState.position.y - NewPos.y)} =< 1 andthen (NewPosMapTileNbr \= 3) andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) then
+					% the move is valid
+					{SendToAll sayMoved(ID NewPos) State}
+					{Send WindowPort moveSoldier(ID NewPos)}
+					NewState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModPos}}
+				else
+					{System.show 'INVALID MOVE'#ID}
+					% if the move is not valid then do nothing
+					NewState = State
+				end
+
+			else
+				{System.show 'Cannot move out of map'#ID}
+				NewState = State
+			end
+			
+
+
+
+			% STEP 4: check if the player has moved on a mine
 			% If so, apply the damage and notify everyone that the mine has exploded and notify everyone for each player that took damage.
 			% If a player dies as a result, notify everyone and skip the rest of the ”turn” for that player.
-			{PlayTurn PlayerPort ID State step5}
+
+
+
+			{PlayTurn PlayerPort ID NewState step5}
 
 		[] step5 then
 			{System.show step5#ID}
