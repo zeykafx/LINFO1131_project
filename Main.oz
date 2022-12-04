@@ -84,7 +84,7 @@ in
 			{AdjoinAt State playersState NewPlayersState}
 		end
 
-		fun {MovePlayer State ID Position}
+		fun {MovePlayer State ID Position ?Status}
 			% modifies the position inside the playersState list
 			fun {ModPos PlayerState}
 				ID OldPosition HP MineReload GunReload Flag
@@ -92,11 +92,40 @@ in
 				playerState(id:ID position:OldPosition hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
 			end
-			
+			NewState NewPosMapTileNbr CurrentPlayerState EnemyBaseTileNbr
 		in
+			CurrentPlayerState = {List.nth State.playersState ID.id}
 
-			% this returns a modified version of State where the playerState list in State (record) is replaced with the updated state 
-			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModPos}}
+			% walls (3) and enemy base are impenetrable, player 1 is red (1) and player 2 is blue (2)
+			EnemyBaseTileNbr = if ID.color == red then 2 else 1 end 
+
+			if (Position.x =< Input.nRow) andthen (Position.y =< Input.nColumn) andthen (Position.x > 0) andthen (Position.y > 0) then
+				
+				% get the tile number for the new position, this is the integer as defined in Input.oz
+				% 0 = Empty
+				% 1 = Player 1's base (red)
+				% 2 = Player 2's base (blue)
+				% 3 = Walls
+				NewPosMapTileNbr = {List.nth {List.nth Input.map Position.x} Position.y}
+
+				% check that the player isn't moving more than one tiles in both directions, and that he isn't moving onto a wall or onto the enemy base
+				if {Abs (CurrentPlayerState.position.x - Position.x)} =< 1 andthen {Abs (CurrentPlayerState.position.y - Position.y)} =< 1 andthen (NewPosMapTileNbr \= 3) andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) then
+
+					% if the move was valid, move the player and bind status to true
+					NewState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID ModPos}}
+					Status = true
+
+				else
+					{System.show 'INVALID MOVE'#ID}
+					NewState = State
+					Status = false
+				end
+			else
+				{System.show 'Cannot move out of map'#ID}
+				NewState = State
+				Status = false
+			end
+			NewState
 		end
 
 
@@ -232,8 +261,8 @@ in
 			[] setPlayersState(NewPlayersState) then
 				{SetPlayersState State NewPlayersState}
 
-			[] movePlayer(ID Position) then
-				{MovePlayer State ID Position}
+			[] movePlayer(ID Position ?Status) then
+				{MovePlayer State ID Position Status}
 
 			[] killPlayer(ID) then
 				{KillPlayer State ID}
@@ -351,7 +380,7 @@ in
 		[] step234 then
 			% list of variables used in step 2, 3, and 4
 			NewPos PlayerID CurrentPlayerState EnemyBaseTileNbr NewPosMapTileNbr HasMineExploded HasPlayerDied
-			PlayersStateList NewPlayerStateList
+			PlayersStateList NewPlayerStateList MoveStatus
 
 		in
 			{System.show 'step 2, 3, and 4'#ID}
@@ -361,92 +390,144 @@ in
 			{Wait PlayerID}
 			{Wait NewPos}
 
-			% get the current state
-			{Send GameControllerPort getPlayersState(PlayersStateList)}
-			{Wait PlayersStateList}
-
 			%%%%%% STEP 3: check if the position the player wants to move to is a valid move, if it is not, the position stays the same,
 			%%%%%% otherwise notify everyone of the player's new position
 
-			CurrentPlayerState = {List.nth PlayersStateList ID.id}
+			{Send GameControllerPort movePlayer(ID NewPos MoveStatus)}
+			{Wait MoveStatus}
 
-			% walls (3) and enemy base are impenetrable, player 1 is red (1) and player 2 is blue (2)
-			EnemyBaseTileNbr = if ID.color == red then 2 else 1 end 
+			if MoveStatus then
+				{SendToAll sayMoved(ID NewPos)}
+				{Send WindowPort moveSoldier(ID NewPos)}
 
-			% check that the position is in the map
-			if (NewPos.x =< Input.nRow) andthen (NewPos.y =< Input.nColumn) andthen (NewPos.x > 0) andthen (NewPos.y > 0) then
+				%%%%%% STEP 4: check if the player has moved on a mine
+				%%%%%% If so, apply the damage and notify everyone that the mine has exploded and notify everyone for each player that took damage.
+				%%%%%% If a player dies as a result, notify everyone and skip the rest of the ”turn” for that player.
 				
-				% get the tile number for the new position, this is the integer as defined in Input.oz
-				% 0 = Empty
-				% 1 = Player 1's base (red)
-				% 2 = Player 2's base (blue)
-				% 3 = Walls
-				NewPosMapTileNbr = {List.nth {List.nth Input.map NewPos.x} NewPos.y}
+				{Send GameControllerPort checkMineAtPos(NewPos HasMineExploded)}
+				{Wait HasMineExploded}
 
-				% check that the player isn't moving more than one tiles in both directions, and that he isn't moving onto a wall or onto the enemy base
-				if {Abs (CurrentPlayerState.position.x - NewPos.x)} =< 1 andthen {Abs (CurrentPlayerState.position.y - NewPos.y)} =< 1 andthen (NewPosMapTileNbr \= 3) andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) then
+				if HasMineExploded \= false then % HasMineExploded is a tuple when a mine has exploded and it's false when no mines exploded
+					% player moved on a mine
 					
-					% the move is valid, so broadcast it to everyone and update the state
-					{Send GameControllerPort movePlayer(ID NewPos)}
-					{SendToAll sayMoved(ID NewPos)}
-					{Send WindowPort moveSoldier(ID NewPos)}
-					
-					
-					%%%%%% STEP 4: check if the player has moved on a mine
-					%%%%%% If so, apply the damage and notify everyone that the mine has exploded and notify everyone for each player that took damage.
-					%%%%%% If a player dies as a result, notify everyone and skip the rest of the ”turn” for that player.
-					
-						{Send GameControllerPort checkMineAtPos(NewPos HasMineExploded)}
-					{Wait HasMineExploded}
+					% a mine deals 2 dmg to any player on the tile and 1 dmg to players within a 1 tile radius (following manhattan distance)
+					local
+						MinePosition Index NewState Status
+					in
+						% destructure the tuple returned to get the mine that exploded
+						mineExploded(MinePosition Index) = HasMineExploded
 
-					if HasMineExploded \= false then % HasMineExploded is a tuple when a mine has exploded and it's false when no mines exploded
-						% player moved on a mine
-						
-						% a mine deals 2 dmg to any player on the tile and 1 dmg to players within a 1 tile radius (following manhattan distance)
+						{System.show 'Mine exploded'#MinePosition}
+
+						{Send GameControllerPort mineExploded(mine(pos:MinePosition) Status)}
+						{Wait Status}
+
+						{SendToAll sayMineExplode(mine(pos:MinePosition))}
+						{Send WindowPort removeMine(mine(pos:MinePosition))}
+
+						%% check if the current player died as a result of the explosion, if so, we'll skip the rest of the turn
 						local
-							MinePosition Index NewState Status
+							PlayersStateAfterMineExplosion
 						in
-							% destructure the tuple returned to get the mine that exploded
-							mineExploded(MinePosition Index) = HasMineExploded
-
-							{System.show 'Mine exploded'#MinePosition}
-
-							{Send GameControllerPort mineExploded(mine(pos:MinePosition) Status)}
-							{Wait Status}
-
-							{SendToAll sayMineExplode(mine(pos:MinePosition))}
-							{Send WindowPort removeMine(mine(pos:MinePosition))}
-
-							%% check if the current player died as a result of the explosion, if so, we'll skip the rest of the turn
-							local
-								PlayersStateAfterMineExplosion
-							in
-								{Send GameControllerPort getPlayersState(PlayersStateAfterMineExplosion)}
-								{Wait PlayersStateAfterMineExplosion}
-								if {List.nth PlayersStateAfterMineExplosion ID.id}.hp == 0 then
-									HasPlayerDied = true
-								else
-									HasPlayerDied = false
-								end
+							{Send GameControllerPort getPlayersState(PlayersStateAfterMineExplosion)}
+							{Wait PlayersStateAfterMineExplosion}
+							if {List.nth PlayersStateAfterMineExplosion ID.id}.hp == 0 then
+								HasPlayerDied = true
+							else
+								HasPlayerDied = false
 							end
-							
 						end
 						
-					else
-						% player is ok
-						HasPlayerDied = false
 					end
-
+					
 				else
-					% if the move is not valid then do nothing
-					{System.show 'INVALID MOVE'#ID}
+					% player is ok
 					HasPlayerDied = false
 				end
-
 			else
-				{System.show 'Cannot move out of map'#ID}
+				% if the move is not valid then do nothing
 				HasPlayerDied = false
 			end
+
+			% CurrentPlayerState = {List.nth PlayersStateList ID.id}
+
+			% walls (3) and enemy base are impenetrable, player 1 is red (1) and player 2 is blue (2)
+			% EnemyBaseTileNbr = if ID.color == red then 2 else 1 end 
+
+			% check that the position is in the map
+			% if (NewPos.x =< Input.nRow) andthen (NewPos.y =< Input.nColumn) andthen (NewPos.x > 0) andthen (NewPos.y > 0) then
+				
+			% 	% get the tile number for the new position, this is the integer as defined in Input.oz
+			% 	% 0 = Empty
+			% 	% 1 = Player 1's base (red)
+			% 	% 2 = Player 2's base (blue)
+			% 	% 3 = Walls
+			% 	NewPosMapTileNbr = {List.nth {List.nth Input.map NewPos.x} NewPos.y}
+
+			% 	% check that the player isn't moving more than one tiles in both directions, and that he isn't moving onto a wall or onto the enemy base
+			% 	if {Abs (CurrentPlayerState.position.x - NewPos.x)} =< 1 andthen {Abs (CurrentPlayerState.position.y - NewPos.y)} =< 1 andthen (NewPosMapTileNbr \= 3) andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) then
+					
+			% 		% the move is valid, so broadcast it to everyone and update the state
+			% 		{Send GameControllerPort movePlayer(ID NewPos)}
+			% 		{SendToAll sayMoved(ID NewPos)}
+			% 		{Send WindowPort moveSoldier(ID NewPos)}
+					
+					
+					% %%%%%% STEP 4: check if the player has moved on a mine
+					% %%%%%% If so, apply the damage and notify everyone that the mine has exploded and notify everyone for each player that took damage.
+					% %%%%%% If a player dies as a result, notify everyone and skip the rest of the ”turn” for that player.
+					
+					% {Send GameControllerPort checkMineAtPos(NewPos HasMineExploded)}
+					% {Wait HasMineExploded}
+
+					% if HasMineExploded \= false then % HasMineExploded is a tuple when a mine has exploded and it's false when no mines exploded
+					% 	% player moved on a mine
+						
+					% 	% a mine deals 2 dmg to any player on the tile and 1 dmg to players within a 1 tile radius (following manhattan distance)
+					% 	local
+					% 		MinePosition Index NewState Status
+					% 	in
+					% 		% destructure the tuple returned to get the mine that exploded
+					% 		mineExploded(MinePosition Index) = HasMineExploded
+
+					% 		{System.show 'Mine exploded'#MinePosition}
+
+					% 		{Send GameControllerPort mineExploded(mine(pos:MinePosition) Status)}
+					% 		{Wait Status}
+
+					% 		{SendToAll sayMineExplode(mine(pos:MinePosition))}
+					% 		{Send WindowPort removeMine(mine(pos:MinePosition))}
+
+					% 		%% check if the current player died as a result of the explosion, if so, we'll skip the rest of the turn
+					% 		local
+					% 			PlayersStateAfterMineExplosion
+					% 		in
+					% 			{Send GameControllerPort getPlayersState(PlayersStateAfterMineExplosion)}
+					% 			{Wait PlayersStateAfterMineExplosion}
+					% 			if {List.nth PlayersStateAfterMineExplosion ID.id}.hp == 0 then
+					% 				HasPlayerDied = true
+					% 			else
+					% 				HasPlayerDied = false
+					% 			end
+					% 		end
+							
+					% 	end
+						
+					% else
+					% 	% player is ok
+					% 	HasPlayerDied = false
+					% end
+
+			% 	else
+			% 		% if the move is not valid then do nothing
+			% 		{System.show 'INVALID MOVE'#ID}
+			% 		HasPlayerDied = false
+			% 	end
+
+			% else
+			% 	{System.show 'Cannot move out of map'#ID}
+			% 	HasPlayerDied = false
+			% end
 
 			if HasPlayerDied then
 				% if the current player died, then skip the rest of the turn
