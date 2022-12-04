@@ -21,7 +21,7 @@ PLAYER2 = "PlayerBasic.oz"
 
 all: compileAll run
 
-compileAll: Input.ozf players PlayerManager.ozf GUI.ozf Main.ozf
+compileAll: Input.ozf Player1.ozf Player2.ozf PlayerManager.ozf GUI.ozf Main.ozf
 
 # Compiles all .oz files into .ozf files
 %.ozf: %.oz
@@ -29,9 +29,15 @@ compileAll: Input.ozf players PlayerManager.ozf GUI.ozf Main.ozf
 
 # overrides the previous rules for the players
 # TODO: remove this when we have the two players created
-players:
-	$(OZC) -c ${PLAYER1} -o "Player1.ozf"
-	$(OZC) -c ${PLAYER2} -o "Player2.ozf"
+
+# players:
+# 	$(OZC) -c ${PLAYER1} -o "Player1.ozf"
+# 	$(OZC) -c ${PLAYER2} -o "Player2.ozf"
+Player%.ozf: PlayerBasic.oz
+	$(OZC) -c $^ -o $@
+
+PlayerManager.ozf: PlayerManager.oz
+	$(OZC) -c $^
 
 run:
 	$(OZENGINE) Main.ozf

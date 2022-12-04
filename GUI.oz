@@ -39,7 +39,7 @@ define
 in
 
 %%%%% Build the initial window and set it up (call only once)
-	fun {BuildWindow}
+	fun {BuildWindow ?Done} % Done is used to know when the interface is ready
 		Grid GridScore Toolbar Desc DescScore Window
 	in
 		Toolbar=lr(glue:we tbbutton(text:"Quit" glue:w action:toplevel#close))
@@ -68,7 +68,7 @@ in
 		end
 
 		{DrawMap Grid}
-
+		Done = true
 		handle(grid:Grid score:GridScore)
 	end
 
@@ -322,8 +322,8 @@ in
 	proc {TreatStream Stream Grid State}
 		case Stream
 		of nil then skip
-		[] buildWindow|T then NewGrid in 
-			NewGrid = {BuildWindow}
+		[] buildWindow(?Done)|T then NewGrid in 
+			NewGrid = {BuildWindow Done}
 			{TreatStream T NewGrid State}
 		[] initSoldier(ID Position)|T then NewState in
 			NewState = {DrawSoldier Grid ID Position}
@@ -331,6 +331,7 @@ in
 		[] moveSoldier(ID Position)|T then
 			{TreatStream T Grid {StateModification Grid ID State {MoveSoldier Position}}}
 		[] lifeUpdate(ID Life)|T then
+			{System.show 'LIFE UPDATE'#ID}
 			{TreatStream T Grid {StateModification Grid ID State {UpdateLife Life}}}
 		[] putMine(Mine)|T then 
 			{TreatStream T Grid {StateModification Grid null State {DrawMine Mine.pos}}}

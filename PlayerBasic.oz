@@ -57,7 +57,7 @@ in
 		if Nbr > Input.nbPlayer then
 			nil
 		else
-			playerState(id:Nbr position:{List.nth Input.spawnPoints Nbr} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|{InitOtherPlayers Nbr+1}
+			playerState(id:id(id:Nbr color:{List.nth Input.colors Nbr}) position:{List.nth Input.spawnPoints Nbr} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|{InitOtherPlayers Nbr+1}
 		end
 	end
 
@@ -125,7 +125,7 @@ in
 		case PlayersState
 		of nil then nil
 		[] playerState(id:ID position:_ hp:_ mineReload:_ gunReload:_ flag:_)|T then
-			if (ID == WantedID) then
+			if (ID.id == WantedID.id) then
 				{Function PlayersState.1}|T
 			else 
 				PlayersState.1|{PlayerStateModification T WantedID Function}
@@ -143,6 +143,7 @@ in
 	fun {Move State ?ID ?Position}
 		Pos
 	in
+		% {SimulatedThinking}
 		ID = State.id
 		% TODO: remove this and replace with proper movements lol
 		% for example
@@ -172,7 +173,7 @@ in
 		end
 
 		% this returns a modified version of State where the playerState list in State (record) is replaced with the updated state 
-		{AdjoinAt NewState playersState {PlayerStateModification State.playersState ID.id ModPos}}
+		{AdjoinAt NewState playersState {PlayerStateModification State.playersState ID ModPos}}
 	end
 
 	fun {SayMineExplode State Mine}
@@ -220,10 +221,11 @@ in
 			playerState(id:ID position:Position hp:0 mineReload:MineReload gunReload:GunReload flag:Flag)
 		end 
 	in
-		{AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModDeath}}
+		{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModDeath}}
 	end
 
 	fun {SayDamageTaken State ID Damage LifeLeft}
+		{System.show 'player '#ID#' took '#Damage#' damage and has '#LifeLeft#' hp.'}
 		State
     end
 
@@ -254,22 +256,25 @@ in
 	fun {Respawn State}
 		fun {ModHp PlayerState}
 			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			NewPos = {List.nth Input.spawnPoints ID.id}
 		in
-			playerState(id:ID position:Position hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
+			playerState(id:ID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
 		end
-		NewState 
+		NewState NewState2
 	in
 		NewState = {AdjoinAt State hp Input.startHealth}
-		{AdjoinAt NewState playersState {PlayerStateModification NewState.playersState NewState.id.id ModHp}}
+		NewState2 = {AdjoinAt NewState position {List.nth Input.spawnPoints NewState.id.id}}
+		{AdjoinAt NewState2 playersState {PlayerStateModification NewState2.playersState NewState2.id ModHp}}
 	end
 
 	fun {SayRespawn State ID}
 		fun {ModHp PlayerState}
 			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			NewPos = {List.nth Input.spawnPoints ID.id}
 		in
-			playerState(id:ID position:Position hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
+			playerState(id:ID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
 		end 
 	in
-		{AdjoinAt State playersState {PlayerStateModification State.playersState ID.id ModHp}}
+		{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
 	end
 end
