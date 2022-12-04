@@ -79,7 +79,6 @@ in
 					mineReloads:0
 					gunReloads:0
 					startPosition:{List.nth Input.spawnPoints ID}
-					% TODO You can add more elements if you need it
 					playersState:{InitOtherPlayers 1} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
@@ -225,8 +224,13 @@ in
 	end
 
 	fun {SayDamageTaken State ID Damage LifeLeft}
-		{System.show 'player '#ID#' took '#Damage#' damage and has '#LifeLeft#' hp.'}
-		State
+		fun {ModHp PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+		in
+			playerState(id:ID position:Position hp:LifeLeft mineReload:MineReload gunReload:GunReload flag:Flag)
+		end 
+	in
+		{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
     end
 
 	fun {TakeFlag State ?ID ?Flag}

@@ -291,6 +291,8 @@ in
 				else
 					State.1|{StateModification Grid WantedID Next Fun}
 				end
+			elseif (ID == null) andthen (WantedID == null) then
+				{Fun Grid State.1}|Next
 			else
 				State.1|{StateModification Grid WantedID Next Fun}
 			end
