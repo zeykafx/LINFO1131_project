@@ -142,12 +142,11 @@ in
 	fun {Move State ?ID ?Position}
 		Pos
 	in
-		% {SimulatedThinking}
+		{SimulatedThinking}
 		ID = State.id
 		% TODO: remove this and replace with proper movements lol
 		% for example
 		% change State.position.x to something else, assign that to State.position and assign the new state to NewState, return that new state
-		% NewState = {AdjoinAt State position {AdjoinAt State.position x if State.id.color == red then State.position.x+1 else State.position.x-1 end}}
 		Pos = State.position
 		Position = {AdjoinAt Pos x if State.id.color == red then State.position.x+1 else State.position.x-1 end}
 		State

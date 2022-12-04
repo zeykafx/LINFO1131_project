@@ -294,21 +294,8 @@ in
 
 	% send a message to all players
 	proc {SendToAll Message} 
-	% 	PlayersStateList
-	% in
-		
-		% {Send GameControllerPort getPlayersState(PlayersStateList)}
-		% {Wait PlayersStateList}
-
 		for Nbr in 1..Input.nbPlayer do
 			{Send {List.nth PlayersPorts Nbr}.2 Message}
-			
-			% send to all alive players
-			% if {List.nth PlayersStateList Nbr}.hp \= 0 then
-			% 	{Send {List.nth PlayersPorts Nbr}.2 Message}
-			% else 
-			% 	skip
-			% end
 		end
 	end
 
@@ -412,86 +399,17 @@ in
 						{Send GameControllerPort checkMineAtPos(NewPos HasMineExploded)}
 					{Wait HasMineExploded}
 
-					% HasMineExploded = {CheckMineAtPos MinesList NewPos 1}
 					if HasMineExploded \= false then % HasMineExploded is a tuple when a mine has exploded and it's false when no mines exploded
 						% player moved on a mine
 						
 						% a mine deals 2 dmg to any player on the tile and 1 dmg to players within a 1 tile radius (following manhattan distance)
 						local
 							MinePosition Index NewState Status
-
-							% % function that applies the damage to the player
-							% fun {ApplyDmg PlayerState HpToRemove}
-							% 	NewHp
-							% 	playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
-							% in
-							% 	NewHp = {Max HP-HpToRemove 0}
-
-							% 	% broadcast that this player has taken damage
-							% 	{Send GameControllerPort sayDamageTaken(LocalID HpToRemove NewHp)}
-
-							% 	{Send WindowPort lifeUpdate(LocalID NewHp)}
-							% 	{SendToAll sayDamageTaken(LocalID HpToRemove NewHp)}
-
-							% 	if NewHp == 0 andthen LocalID.id == ID.id then
-							% 		HasPlayerDied = true
-
-							% 		{SendToAll sayDeath(LocalID)}
-							% 		{Send GameControllerPort killPlayer(LocalID)}
-
-							% 	elseif NewHp == 0 andthen LocalID.id \= ID.id then
-							% 		if {IsDet HasPlayerDied} == false then
-							% 			HasPlayerDied = false
-							% 		else
-							% 			skip
-							% 		end
-
-							% 		{SendToAll sayDeath(LocalID)}
-							% 		{Send GameControllerPort killPlayer(LocalID)}
-
-							% 	else 
-							% 		if {IsDet HasPlayerDied} == false then
-							% 			HasPlayerDied = false
-							% 		else
-							% 			skip
-							% 		end
-							% 	end
-
-							% 	playerState(id:LocalID position:Position hp:NewHp mineReload:MineReload gunReload:GunReload flag:Flag)
-							% end 
-
-							% % apply damage to all players based on the range from the mine
-							% fun {ApplyDmgIfInRange PlayersState MinePos}
-							% 	DistanceFromMine 
-							% in
-							% 	case PlayersState
-							% 	of nil then nil
-							% 	[] playerState(id:ID position:Position hp:_ mineReload:_ gunReload:_ flag:_)|T then
-							% 		% get the manhattan distance from the mine
-							% 		DistanceFromMine = {ManhattanDistance MinePos Position}
-							% 		{System.show 'Player '#ID#' at position'#Position#' is at distance '#DistanceFromMine#' from the mine at position '#MinePos}
-
-							% 		if DistanceFromMine == 0 then
-							% 			% the mine deals two dmg if the player stepped on the mine 
-							% 			{ApplyDmg PlayersState.1 2}|{ApplyDmgIfInRange T MinePos} % continue looking for other players possibly hurt
-							% 		elseif DistanceFromMine == 1 then
-							% 			% only deal one dmg if the player was in a one tile away
-							% 			{ApplyDmg PlayersState.1 1}|{ApplyDmgIfInRange T MinePos}
-							% 		else
-							% 			% dont apply dmg, the player was too far away from the explosion
-							% 			PlayersState.1|{ApplyDmgIfInRange T MinePos}
-							% 		end
-							% 	end
-							% end
 						in
 							% destructure the tuple returned to get the mine that exploded
 							mineExploded(MinePosition Index) = HasMineExploded
 
 							{System.show 'Mine exploded'#MinePosition}
-
-							% get the latest state
-							% {Send GameControllerPort getPlayersState(NewPlayerStateList)}
-							% {Wait NewPlayerStateList}
 
 							{Send GameControllerPort mineExploded(mine(pos:MinePosition) Status)}
 							{Wait Status}
@@ -512,11 +430,6 @@ in
 								end
 							end
 							
-							
-							% NewState = {ApplyDmgIfInRange NewPlayerStateList MinePosition}
-
-							% go through the players and find all the players that are near the mine and then set the new state
-							% {Send GameControllerPort setPlayersState(NewState)}
 						end
 						
 					else
