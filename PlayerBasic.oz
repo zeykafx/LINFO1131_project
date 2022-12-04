@@ -57,7 +57,7 @@ in
 		if Nbr > Input.nbPlayer then
 			nil
 		else
-			playerState(id:id(id:Nbr color:{List.nth Input.colors Nbr}) position:{List.nth Input.spawnPoints Nbr} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|{InitOtherPlayers Nbr+1}
+			playerState(id:id(id:Nbr color:{List.nth Input.colors Nbr} name:_) position:{List.nth Input.spawnPoints Nbr} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|{InitOtherPlayers Nbr+1}
 		end
 	end
 

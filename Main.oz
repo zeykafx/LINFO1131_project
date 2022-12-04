@@ -41,7 +41,7 @@ in
 		if Nbr > Input.nbPlayer then
 			nil
 		else
-			playerState(id:id(id:Nbr color:{List.nth Input.colors Nbr}) position:{List.nth Input.spawnPoints Nbr} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|{InitPlayersState Nbr+1}
+			playerState(id:id(id:Nbr color:{List.nth Input.colors Nbr} name:_) position:{List.nth Input.spawnPoints Nbr} hp:Input.startHealth mineReload:0 gunReload:0 flag:null)|{InitPlayersState Nbr+1}
 		end
 	end
 
@@ -148,7 +148,6 @@ in
 		in
 			{AdjoinAt State mines {RemoveMine State.mines Mine}}
 		end
-
 
 	in
 		case Head 
@@ -260,7 +259,7 @@ in
 				% broadcast that player#ID is dead
 				{SendToAll sayDeath(ID)}
 
-				{Delay 3000} % TODO: change to Input.respawnDelay
+				{Delay Input.respawnDelay}
 
 				% make the player respawn and then broadcast that 
 				{Send PlayerPort respawn()}
@@ -406,11 +405,12 @@ in
 									[] playerState(id:ID position:Position hp:_ mineReload:_ gunReload:_ flag:_)|T then
 										% get the manhattan distance from the mine
 										DistanceFromMine = {ManhattanDistance MinePos Position}
+										{System.show 'Player '#ID#' at position'#Position#' is at distance '#DistanceFromMine#' from the mine at position '#MinePos}
 
 										if DistanceFromMine == 0 then
 											% the mine deals two dmg if the player stepped on the mine 
 											{ApplyDmg PlayersState.1 2}|{ApplyDmgIfInRange T MinePos} % continue looking for other players possibly hurt
-										elseif DistanceFromMine == 1 then
+										elseif DistanceFromMine =< 2 then
 											% only deal one dmg if the player was in a one tile radius
 											{ApplyDmg PlayersState.1 1}|{ApplyDmgIfInRange T MinePos}
 										else
@@ -428,7 +428,6 @@ in
 								% get the latest state
 								{Send GameControllerPort getPlayersState(NewPlayerStateList)}
 								{Wait NewPlayerStateList}
-								{System.show 'NewPlayerStateList AT MINE EXPLOSION '#NewPlayerStateList}
 
 								{Send GameControllerPort mineExploded(mine(pos:MinePosition))}
 								{SendToAll sayMineExplode(mine(pos:MinePosition))}
@@ -514,7 +513,7 @@ in
 
 		{System.show endOfLoop(ID)}
 
-		{Delay 500} % added a delay to make the GUI respond faster
+		{Delay Input.guiDelay} % added a delay to make the GUI respond faster
 
 		{Main Port ID}
 	end

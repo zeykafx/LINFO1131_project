@@ -275,7 +275,7 @@ in
 			HandleScore
 		in
 			guiSoldier(id:_ score:HandleScore soldier:_ mines:_ flags:_ foods:_) = State
-			{HandleScore set(Life)}
+			{HandleScore set(text:Life)}
 	 		State
 		end
 	end
@@ -285,8 +285,12 @@ in
 		case State
 		of nil then nil
 		[] guiSoldier(id:ID score:_ soldier:_ mines:_ flags:_ foods:_)|Next then
-			if (ID == WantedID) then
-				{Fun Grid State.1}|Next
+			if (ID \= null) andthen (WantedID \= null) andthen {HasFeature ID id} andthen {HasFeature WantedID id} then
+				if (ID.id == WantedID.id) then
+					{Fun Grid State.1}|Next
+				else
+					State.1|{StateModification Grid WantedID Next Fun}
+				end
 			else
 				State.1|{StateModification Grid WantedID Next Fun}
 			end
@@ -331,7 +335,6 @@ in
 		[] moveSoldier(ID Position)|T then
 			{TreatStream T Grid {StateModification Grid ID State {MoveSoldier Position}}}
 		[] lifeUpdate(ID Life)|T then
-			{System.show 'LIFE UPDATE'#ID}
 			{TreatStream T Grid {StateModification Grid ID State {UpdateLife Life}}}
 		[] putMine(Mine)|T then 
 			{TreatStream T Grid {StateModification Grid null State {DrawMine Mine.pos}}}
