@@ -204,9 +204,9 @@ in
 	fun {ChargeItem State ?ID ?Kind} 
 		{SimulatedThinking}
 
-
+		% TODO: change with real decisions
 		ID = State.id
-		Kind = null
+		Kind = gun
 		State
 	end
 
@@ -245,8 +245,11 @@ in
 	end
 
 	fun {FireItem State ?ID ?Kind}
+		{SimulatedThinking}
+
+		% TODO: change with real decision
 		ID = State.id
-		Kind = null
+		Kind = gun(pos:pt(x:State.position.x +1 y:State.position.y+1))
 		State
 	end
 

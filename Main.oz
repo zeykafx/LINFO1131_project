@@ -75,15 +75,18 @@ in
 
 	fun {MatchHead Head State}
 
+		%%% handles getPlayersState(?List) messages
 		fun {GetPlayersState State ?List}
 			List = State.playersState
 			State
 		end
-
+		
+		%%% handles setPlayersState(NewPlayersState) messages
 		fun {SetPlayersState State NewPlayersState}
 			{AdjoinAt State playersState NewPlayersState}
 		end
-
+		
+		%%% handles movePlayer(ID Position ?Status) messages
 		fun {MovePlayer State ID Position ?Status}
 			% modifies the position inside the playersState list
 			fun {ModPos PlayerState}
@@ -130,7 +133,7 @@ in
 			NewState
 		end
 
-
+		%%% handles killPlayer(ID) messages
 		fun {KillPlayer State ID}
 			fun {ModDeath PlayerState}
 				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
@@ -142,7 +145,7 @@ in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModDeath}}
 		end
 
-
+		%%% handles respawnPlayer(ID) messages
 		fun {RespawnPlayer State ID}
 			fun {ModHp PlayerState}
 				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
@@ -154,6 +157,7 @@ in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
 		end
 
+		%%% handles sayDamageTaken(ID Damage LifeLeft) messages
 		fun {SayDamageTaken State ID Damage LifeLeft}
 			fun {ModHp PlayerState}
 				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
@@ -165,97 +169,102 @@ in
 		end
 
 		%%% MINES
-
+		
+		%%% handles getMines(?Mines) messages
 		fun {GetMines State ?Mines}
 			Mines = State.mines
 			State
 		end
 
-		fun {CheckMineAtPos State Position ?HasMineExploded}
-			% check if there is a mine at a given position, used in step 4
-			fun {CheckMineAtPosHelper MineList Position Index}
-				case MineList
-				of nil then false
-				[] mine(pos:MinePosition)|T then
-					if MinePosition == Position then
-						mineExploded(MinePosition Index)
-					else
-						{CheckMineAtPosHelper T Position Index+1}
-					end
+
+		% check if there is a mine at a given position, used in step 4
+		fun {CheckMineAtPosHelper MineList Position Index}
+			case MineList
+			of nil then false
+			[] mine(pos:MinePosition)|T then
+				if MinePosition == Position then
+					mineExploded(MinePosition Index)
+				else
+					{CheckMineAtPosHelper T Position Index+1}
 				end
 			end
-		in
+		end
+
+		%%% handles checkMineAtPos(Position ?HasMineExploded) messages
+		fun {CheckMineAtPos State Position ?HasMineExploded}
 			HasMineExploded = {CheckMineAtPosHelper State.mines Position 1}
 			State
 		end
 
+		%% MineExploded and FireItem helper functions
+		% removes the mine from the list of mines on the map
+		fun {RemoveMine MineList WantedMine}
+			case MineList
+			of nil then nil
+			[] MineInList|T then
+				if MineInList == WantedMine then
+					T
+				else
+					MineInList|{RemoveMine T WantedMine}
+				end
+			end
+		end
+
+		% function that applies the damage to the player
+		fun {ApplyDmg PlayerState HpToRemove}
+			playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			NewHp
+		in
+			NewHp = {Max HP-HpToRemove 0}
+			{System.show 'Player id'#LocalID#' now has '#NewHp#' hp'}
+
+			% broadcast that this player has taken damage
+			{Send WindowPort lifeUpdate(LocalID NewHp)}
+			{SendToAll sayDamageTaken(LocalID HpToRemove NewHp)}
+
+			if NewHp == 0 then
+				{SendToAll sayDeath(LocalID)}
+			end
+
+			playerState(id:LocalID position:Position hp:NewHp mineReload:MineReload gunReload:GunReload flag:Flag)
+		end 
+
+		% apply damage to all players based on the range from the mine
+		fun {ApplyDmgIfInRange PlayersState MinePos}
+			DistanceFromMine 
+		in
+			case PlayersState
+			of nil then nil
+			[] playerState(id:ID position:Position hp:_ mineReload:_ gunReload:_ flag:_)|T then
+				% get the manhattan distance from the mine
+				DistanceFromMine = {ManhattanDistance MinePos Position}
+				{System.show 'Player '#ID#' at position'#Position#' is at distance '#DistanceFromMine#' from the mine at position '#MinePos}
+
+				if DistanceFromMine == 0 then
+					% the mine deals two dmg if the player stepped on the mine 
+					{ApplyDmg PlayersState.1 2}|{ApplyDmgIfInRange T MinePos} % continue looking for other players possibly hurt
+				elseif DistanceFromMine == 1 then
+					% only deal one dmg if the player was in a one tile away
+					{ApplyDmg PlayersState.1 1}|{ApplyDmgIfInRange T MinePos}
+				else
+					% dont apply dmg, the player was too far away from the explosion
+					PlayersState.1|{ApplyDmgIfInRange T MinePos}
+				end
+			end
+		end
+
+		%%% handles mineExploded(Mine ?Status) messages
 		fun {MineExploded State Mine ?Status}
-			% removes the mine from the list of mines on the map
-			fun {RemoveMine MineList WantedMine}
-				case MineList
-				of nil then nil
-				[] MineInList|T then
-					if MineInList == WantedMine then
-						T
-					else
-						MineInList|{RemoveMine T WantedMine}
-					end
-				end
-			end
-
-			% function that applies the damage to the player
-			fun {ApplyDmg PlayerState HpToRemove}
-				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
-				NewHp
-			in
-				NewHp = {Max HP-HpToRemove 0}
-				{System.show 'Player id'#LocalID#' now has '#NewHp#' hp'}
-
-				% broadcast that this player has taken damage
-				{Send WindowPort lifeUpdate(LocalID NewHp)}
-				{SendToAll sayDamageTaken(LocalID HpToRemove NewHp)}
-
-				if NewHp == 0 then
-					{SendToAll sayDeath(LocalID)}
-				end
-
-				playerState(id:LocalID position:Position hp:NewHp mineReload:MineReload gunReload:GunReload flag:Flag)
-			end 
-
-			% apply damage to all players based on the range from the mine
-			fun {ApplyDmgIfInRange PlayersState MinePos}
-				DistanceFromMine 
-			in
-				case PlayersState
-				of nil then nil
-				[] playerState(id:ID position:Position hp:_ mineReload:_ gunReload:_ flag:_)|T then
-					% get the manhattan distance from the mine
-					DistanceFromMine = {ManhattanDistance MinePos Position}
-					{System.show 'Player '#ID#' at position'#Position#' is at distance '#DistanceFromMine#' from the mine at position '#MinePos}
-
-					if DistanceFromMine == 0 then
-						% the mine deals two dmg if the player stepped on the mine 
-						{ApplyDmg PlayersState.1 2}|{ApplyDmgIfInRange T MinePos} % continue looking for other players possibly hurt
-					elseif DistanceFromMine == 1 then
-						% only deal one dmg if the player was in a one tile away
-						{ApplyDmg PlayersState.1 1}|{ApplyDmgIfInRange T MinePos}
-					else
-						% dont apply dmg, the player was too far away from the explosion
-						PlayersState.1|{ApplyDmgIfInRange T MinePos}
-					end
-				end
-			end
-
 			NewState
 		in
 			NewState = {AdjoinAt State playersState {ApplyDmgIfInRange State.playersState Mine.pos}}
-			{System.show 'New state after applying damage'#NewState}
 			Status = true
 			{AdjoinAt NewState mines {RemoveMine NewState.mines Mine}}
 		end
 
 		%% Items
 
+		%%% handles chargeItem(ID Item ?Status) messages
 		fun {ChargeItem State ID Item ?Status}
 			fun {ModCharge PlayerState}
 				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
@@ -276,6 +285,80 @@ in
 			end 
 		in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModCharge}}
+		end
+
+		% check if there is a player at a given position, used in step 6 (when shooting a gun)
+		fun {CheckPlayerAtPos PlayersState WantedPosition Function}
+			case PlayersState
+			of nil then nil
+			[] playerState(id:ID position:PlayerPosition hp:_ mineReload:_ gunReload:_ flag:_)|T then
+				if (PlayerPosition == WantedPosition) then
+					{Function PlayersState.1}|T
+				else 
+					PlayersState.1|{CheckPlayerAtPos T WantedID Function}
+				end
+			end
+		end
+
+		%%% handles fireItem(ID FiredItem ?Status) messages
+		fun {FireItem State ID FiredItem ?Status}
+			% check that the item can indeed be fired
+			% then fire that weapon, guns have a range of 2 and mines are placed below the player
+			local
+				CurrentPlayerState DistanceFromWeaponPos HasMineExploded MinePosition Index
+				NewState NewState2
+				fun {ModHp PlayerState}
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+				in
+					playerState(id:ID position:Position hp:LifeLeft mineReload:MineReload gunReload:GunReload flag:Flag)
+				end 
+			in
+				CurrentPlayerState = {List.nth State.playersState ID.id}
+				DistanceFromWeaponPos = {ManhattanDistance CurrentPlayerState.position FiredItem.pos}
+
+				if {FiredItem.label} == gun then
+
+					% if the player has enough charges to fire, then the player can fire the gun
+					if CurrentPlayerState.gunReload == Input.GunCharge andthen DistanceFromWeaponPos <= 2 then
+				
+						% check for mines and detonate them if they were shot
+						HasMineExploded = {CheckMineAtPosHelper State.mines FiredItem.pos 1}
+						if HasMineExploded then
+							mineExploded(MinePosition Index) = HasMineExploded
+							{System.show 'Mine exploded when getting shot at'#MinePosition}
+
+							{SendToAll sayMineExplode(mine(pos:MinePosition))}
+							{Send WindowPort removeMine(mine(pos:MinePosition))}
+
+							% this is ugly, i know
+							% so you first apply the damage to the players, and then you remove the mine that exploded on the new state returned by ApplyDmgIfInRange
+							NewState = {AdjoinAt {AdjoinAt State playersState {ApplyDmgIfInRange State.playersState Mine.pos}} mines {RemoveMine State.mines Mine}}
+							
+						else
+							NewState = State
+						end
+
+						% check if there is any players at the position, if so, apply 1 dmg (Dont kill?)
+						NewState2 = {CheckPlayerAtPos NewState FireItem.pos ApplyShot}
+					else
+						% the player cannot fire the gun yet or is too far
+						NewState = State
+						Status = false
+					end
+					
+				elseif {FiredItem.label} == mine then
+					% if the player has enough charge for the mine
+					if CurrentPlayerState.mineReload == Input.mineCharge andthen DistanceFromWeaponPos == 0 then
+	
+					else
+						Status = false
+					end
+				else % else it was null, so do nothing
+					Status = false
+				end
+				
+				NewState
+			end
 		end
 
 	in
@@ -310,6 +393,9 @@ in
 
 			[] chargeItem(ID Item ?Status) then
 				{ChargeItem State ID Item Status}
+
+			[] fireItem(ID FiredItem ?Status) then
+				{FireItem State ID FiredItem Status}
 		end
 	end
 
@@ -366,8 +452,8 @@ in
 
 			{System.show step1#ID}
 			%%%%%% STEP 1: if the player is dead, then update the GUI and send to all players that player#ID is dead
-			% wait for respawnDelay and then set the player's life count back to startHealth, 
-			% reset the player's position and broadcast that player#ID is alive with startHealth HP
+			%%%%%% wait for respawnDelay and then set the player's life count back to startHealth, 
+			%%%%%% reset the player's position and broadcast that player#ID is alive with startHealth HP
 
 
 			{Send GameControllerPort getPlayersState(PlayersStateList)}
@@ -518,6 +604,23 @@ in
 			%%%%%% can indeed use that weapon, and if so send a message notifying everyone, then reset the charge counter
 			%%%%%% to 0 for that weapon. If a mine is exploded as a result, notify everyone that it has exploded and apply
 			%%%%%% the damage. If a player has been shot, notify everyone.
+			
+			local
+				PlayerID KindOfWeaponToFire Status
+			in
+				{Send PlayerPort fireItem(PlayerID KindOfWeaponToFire)}
+				{Wait PlayerID}
+				{Wait KindOfWeaponToFire}
+
+				if KindOfWeaponToFire \= null then
+					% check that the player can fire the weapon and fire it,...
+					{Send GameControllerPort fireIem(ID KindOfWeaponToFire Status)}
+				else
+					% the player doesn't want to fire any weapon, so skip
+					skip
+				end
+				
+			end
 
 			{PlayTurn PlayerPort ID step7}
 
@@ -526,7 +629,7 @@ in
 
 			%%%%%% STEP 7: Ask the player if it wants to grab the flag (only if it is possible).
 			%%%%%% Notify everyone if the flag has been picked up.
-			
+
 			{PlayTurn PlayerPort ID step8}
 
 		[] step8 then
@@ -549,7 +652,7 @@ in
 			%%%%%% STEP 10: The game Controller is also responsible for spawning food randomly on the map after a random time
 			%%%%%% between FoodDelayMin and FoodDelayMin has passed
 			
-				{PlayTurn PlayerPort ID endTurn}
+			{PlayTurn PlayerPort ID endTurn}
 		[] endTurn then
 			{System.show endTurn#ID}
 		end
