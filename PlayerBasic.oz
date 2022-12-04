@@ -79,6 +79,7 @@ in
 					mineReloads:0
 					gunReloads:0
 					startPosition:{List.nth Input.spawnPoints ID}
+					mines:nil
 					playersState:{InitOtherPlayers 1} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
@@ -175,7 +176,21 @@ in
 	end
 
 	fun {SayMineExplode State Mine}
-		State
+		% removes the mine from the list of mines on the map
+		fun {RemoveMine MineList WantedMine}
+			case MineList
+			of nil then nil
+			[] MineInList|T then
+				if MineInList == WantedMine then
+					T
+				else
+					MineInList|{RemoveMine T WantedMine}
+				end
+			end
+		end
+	in
+		% remove the mine from the mine list
+		{AdjoinAt State mines {RemoveMine State.mines Mine}}
 	end
 
 	fun {SayFoodAppeared State Food}
@@ -189,13 +204,44 @@ in
 	fun {ChargeItem State ?ID ?Kind} 
 		{SimulatedThinking}
 
+
 		ID = State.id
 		Kind = null
 		State
 	end
 
 	fun {SayCharge State ID Kind}
-		State
+		fun {ModCharge PlayerState}
+			playerState(id:LocID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			NewGunReload NewMineReload
+		in
+			if Kind == gun then
+				NewGunReload = {Min GunReload+1 Input.gunCharge}
+				NewMineReload = MineReload
+			else
+				NewGunReload = GunReload
+				NewMineReload = {Min MineReload+1 Input.mineCharge}
+			end
+
+			% update the mine/gun reload
+			playerState(id:LocID position:Position hp:HP mineReload:NewMineReload gunReload:NewGunReload flag:Flag)
+		end 
+		NewState
+	in
+		% this player charged their gun or mine
+		if ID == State.id then
+			% increase the state charge counter
+			if Kind == gun then
+				NewState = {AdjoinAt State gunReloads State.gunReloads+1}
+			else
+				NewState = {AdjoinAt State mineReloads State.mineReloads+1}
+			end
+		else
+			NewState = State
+		end
+		% also modify the charge in the playersState list
+		{AdjoinAt NewState playersState {PlayerStateModification NewState.playersState ID ModCharge}}
+
 	end
 
 	fun {FireItem State ?ID ?Kind}

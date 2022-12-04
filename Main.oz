@@ -254,6 +254,30 @@ in
 			{AdjoinAt NewState mines {RemoveMine NewState.mines Mine}}
 		end
 
+		%% Items
+
+		fun {ChargeItem State ID Item ?Status}
+			fun {ModCharge PlayerState}
+				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+				NewGunReload NewMineReload
+			in
+				if Item == gun then
+					NewGunReload = {Min GunReload+1 Input.gunCharge}
+					NewMineReload = MineReload
+				else
+					NewGunReload = GunReload
+					NewMineReload = {Min MineReload+1 Input.mineCharge}
+				end
+
+				Status = true
+
+				% update the mine/gun reload
+				playerState(id:ID position:Position hp:HP mineReload:NewMineReload gunReload:NewGunReload flag:Flag)
+			end 
+		in
+			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModCharge}}
+		end
+
 	in
 		case Head 
 			of nil then nil
@@ -283,6 +307,9 @@ in
 				
 			[] mineExploded(Mine ?Status) then
 				{MineExploded State Mine Status}
+
+			[] chargeItem(ID Item ?Status) then
+				{ChargeItem State ID Item Status}
 		end
 	end
 
@@ -338,7 +365,7 @@ in
 		in
 
 			{System.show step1#ID}
-			% if the player is dead, then update the GUI and send to all players that player#ID is dead
+			%%%%%% STEP 1: if the player is dead, then update the GUI and send to all players that player#ID is dead
 			% wait for respawnDelay and then set the player's life count back to startHealth, 
 			% reset the player's position and broadcast that player#ID is alive with startHealth HP
 
@@ -370,8 +397,6 @@ in
 				
 				{Send WindowPort initSoldier(ID {List.nth NewPlayersStateList ID.id}.position)}
 				{Send WindowPort lifeUpdate(ID {List.nth NewPlayersStateList ID.id}.hp)}
-			
-				
 			else
 				% player is alive, do nothing
 				skip
@@ -457,39 +482,74 @@ in
 				% continue the turn as usual if the player isn't dead
 				{PlayTurn PlayerPort ID step5}
 			end
+
 		[] step5 then
 			{System.show step5#ID}
-			% ask the player what weapon it wants to charge (gun or mine)
+			
+			%%%%%% STEP 5: ask the player what weapon it wants to charge (gun or mine)
+
+			local
+				PlayerID KindOfWeapon Status
+			in
+				{Send PlayerPort chargeItem(PlayerID KindOfWeapon)}
+				{Wait PlayerID}
+				{Wait KindOfWeapon}
+
+				if KindOfWeapon == null then
+					% player doesn't want to charge a gun or mine, so skip
+					skip
+				else
+					% charge the item
+					{Send GameControllerPort chargeItem(ID KindOfWeapon Status)}
+					{Wait Status}
+					
+					% broadcast to all players (including this player) that his gun/mine was charged by 1
+					{SendToAll sayCharge(PlayerID KindOfWeapon)}
+					
+				end
+			end
+
 			{PlayTurn PlayerPort ID step6}
 
 		[] step6 then
 			{System.show step6#ID}
-			% Ask the player what weapon it wants to use (place a mine or shoot at something). Check if the player
-			% can indeed use that weapon, and if so send a message notifying everyone, then reset the charge counter
-			% to 0 for that weapon. If a mine is exploded as a result, notify everyone that it has exploded and apply
-			% the damage. If a player has been shot, notify everyone.
+
+			%%%%%% STEP 6: Ask the player what weapon it wants to use (place a mine or shoot at something). Check if the player
+			%%%%%% can indeed use that weapon, and if so send a message notifying everyone, then reset the charge counter
+			%%%%%% to 0 for that weapon. If a mine is exploded as a result, notify everyone that it has exploded and apply
+			%%%%%% the damage. If a player has been shot, notify everyone.
+
 			{PlayTurn PlayerPort ID step7}
 
 		[] step7 then
 			{System.show step7#ID}
-			% Ask the player if it wants to grab the flag (only if it is possible). Notify everyone if the flag has been picked up.
+
+			%%%%%% STEP 7: Ask the player if it wants to grab the flag (only if it is possible).
+			%%%%%% Notify everyone if the flag has been picked up.
+			
 			{PlayTurn PlayerPort ID step8}
 
 		[] step8 then
 			{System.show step8#ID}
-			% if applicable, ask the player if they want to drop the flag. Notify everyone if they do.
+
+			%%%%%% STEP 8: if applicable, ask the player if they want to drop the flag. Notify everyone if they do.
+			
 			{PlayTurn PlayerPort ID step9}
 
 		[] step9 then
 			{System.show step9#ID}
-			% if a player has died, notify everyone and also notify them if the flag has been dropped as a result.
+			
+			%%%%%% STEP 9: if a player has died, notify everyone and also notify them if the flag has been dropped as a result.
+			
 			{PlayTurn PlayerPort ID step10}
 
 		[] step10 then
 			{System.show step10#ID}
-			% The game Controller is also responsible for spawning food randomly on the map after a random time
-			% between FoodDelayMin and FoodDelayMin has passed
-			{PlayTurn PlayerPort ID endTurn}
+
+			%%%%%% STEP 10: The game Controller is also responsible for spawning food randomly on the map after a random time
+			%%%%%% between FoodDelayMin and FoodDelayMin has passed
+			
+				{PlayTurn PlayerPort ID endTurn}
 		[] endTurn then
 			{System.show endTurn#ID}
 		end
