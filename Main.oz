@@ -21,7 +21,6 @@ define
 	InitPlayersState
 	PlayerStateModification
 	ManhattanDistance
-	Max
 
 	proc {DrawFlags Flags Port}
 		case Flags of nil then
@@ -262,7 +261,7 @@ in
 			{AdjoinAt NewState mines {RemoveMine NewState.mines Mine}}
 		end
 
-		%% Items
+		%%%% Items
 
 		%%% handles chargeItem(ID Item ?Status) messages
 		fun {ChargeItem State ID Item ?Status}
@@ -295,7 +294,7 @@ in
 				if (PlayerPosition == WantedPosition) then
 					{Function PlayersState.1}|T
 				else 
-					PlayersState.1|{CheckPlayerAtPos T WantedID Function}
+					PlayersState.1|{CheckPlayerAtPos T WantedPosition Function}
 				end
 			end
 		end
@@ -310,20 +309,20 @@ in
 				fun {ModHp PlayerState}
 					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 				in
-					playerState(id:ID position:Position hp:LifeLeft mineReload:MineReload gunReload:GunReload flag:Flag)
+					playerState(id:ID position:Position hp:{Max HP-1 0} mineReload:MineReload gunReload:GunReload flag:Flag)
 				end 
 			in
 				CurrentPlayerState = {List.nth State.playersState ID.id}
 				DistanceFromWeaponPos = {ManhattanDistance CurrentPlayerState.position FiredItem.pos}
 
-				if {FiredItem.label} == gun then
+				if {Record.label FiredItem} == gun then
 
 					% if the player has enough charges to fire, then the player can fire the gun
-					if CurrentPlayerState.gunReload == Input.GunCharge andthen DistanceFromWeaponPos <= 2 then
-				
+					if CurrentPlayerState.gunReload == Input.gunCharge andthen DistanceFromWeaponPos =< 2 then
 						% check for mines and detonate them if they were shot
 						HasMineExploded = {CheckMineAtPosHelper State.mines FiredItem.pos 1}
-						if HasMineExploded then
+
+						if HasMineExploded \= false then
 							mineExploded(MinePosition Index) = HasMineExploded
 							{System.show 'Mine exploded when getting shot at'#MinePosition}
 
@@ -332,38 +331,41 @@ in
 
 							% this is ugly, i know
 							% so you first apply the damage to the players, and then you remove the mine that exploded on the new state returned by ApplyDmgIfInRange
-							NewState = {AdjoinAt {AdjoinAt State playersState {ApplyDmgIfInRange State.playersState Mine.pos}} mines {RemoveMine State.mines Mine}}
+							NewState = {AdjoinAt {AdjoinAt State playersState {ApplyDmgIfInRange State.playersState MinePosition}} mines {RemoveMine State.mines mine(pos:MinePosition)}}
 							
 						else
 							NewState = State
 						end
-
+						{System.show 'NewState.playersState'#NewState.playersState}
 						% check if there is any players at the position, if so, apply 1 dmg (Dont kill?)
-						NewState2 = {CheckPlayerAtPos NewState FireItem.pos ApplyShot}
+						NewState2 = {CheckPlayerAtPos NewState.playersState FiredItem.pos ModHp}
 					else
 						% the player cannot fire the gun yet or is too far
-						NewState = State
+						NewState2 = State
 						Status = false
 					end
 					
-				elseif {FiredItem.label} == mine then
+				elseif {Record.label FiredItem} == mine then
 					% if the player has enough charge for the mine
 					if CurrentPlayerState.mineReload == Input.mineCharge andthen DistanceFromWeaponPos == 0 then
-	
+						skip
 					else
 						Status = false
 					end
+					NewState2 = State
 				else % else it was null, so do nothing
 					Status = false
+					NewState2 = State
 				end
 				
-				NewState
+				NewState2
 			end
 		end
 
 	in
 		case Head 
 			of nil then nil
+
 			[] getPlayersState(?List) then
 				{GetPlayersState State List}
 
@@ -425,9 +427,10 @@ in
 		end
 	end
 
-	fun {Max X Y}
-		if X > Y then X else Y end
-	end
+	% fun {Max X Y}
+	% 	if X > Y then X else Y end
+	% end
+
 
 	SimulatedThinking = proc{$} {Delay ({OS.rand} mod (Input.thinkMax - Input.thinkMin) + Input.thinkMin)} end
 
@@ -504,13 +507,13 @@ in
 			%%%%%% STEP 3: check if the position the player wants to move to is a valid move, if it is not, the position stays the same,
 			%%%%%% otherwise notify everyone of the player's new position
 
-			{Send GameControllerPort movePlayer(ID NewPos MoveStatus)}
+			{Send GameControllerPort movePlayer(PlayerID NewPos MoveStatus)}
 			{Wait MoveStatus}
 
 			% if the move is valid, then broadcast the movement and continue on with step 4
 			if MoveStatus then
-				{SendToAll sayMoved(ID NewPos)}
-				{Send WindowPort moveSoldier(ID NewPos)}
+				{SendToAll sayMoved(PlayerID NewPos)}
+				{Send WindowPort moveSoldier(PlayerID NewPos)}
 
 				%%%%%% STEP 4: check if the player has moved on a mine
 				%%%%%% If so, apply the damage and notify everyone that the mine has exploded and notify everyone for each player that took damage.
@@ -543,7 +546,7 @@ in
 						in
 							{Send GameControllerPort getPlayersState(PlayersStateAfterMineExplosion)}
 							{Wait PlayersStateAfterMineExplosion}
-							if {List.nth PlayersStateAfterMineExplosion ID.id}.hp == 0 then
+							if {List.nth PlayersStateAfterMineExplosion PlayerID.id}.hp == 0 then
 								HasPlayerDied = true
 							else
 								HasPlayerDied = false
@@ -614,7 +617,7 @@ in
 
 				if KindOfWeaponToFire \= null then
 					% check that the player can fire the weapon and fire it,...
-					{Send GameControllerPort fireIem(ID KindOfWeaponToFire Status)}
+					{Send GameControllerPort fireItem(ID KindOfWeaponToFire Status)}
 				else
 					% the player doesn't want to fire any weapon, so skip
 					skip

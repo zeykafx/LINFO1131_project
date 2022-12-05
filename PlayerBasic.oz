@@ -145,11 +145,22 @@ in
 	in
 		{SimulatedThinking}
 		ID = State.id
-		% TODO: remove this and replace with proper movements lol
-		% for example
-		% change State.position.x to something else, assign that to State.position and assign the new state to NewState, return that new state
+		% TODO: remove this and replace with proper movements
 		Pos = State.position
-		Position = {AdjoinAt Pos x if State.id.color == red then State.position.x+1 else State.position.x-1 end}
+		if State.id.color == red then 
+			if State.position.x == Input.nColumn then 
+				Position = {AdjoinAt Pos y State.position.y + 1}
+			else 
+				Position = {AdjoinAt Pos x State.position.x + 1}
+			end
+		else 
+			if State.position.x == 1 then % there is no 0 in the coords
+				Position = {AdjoinAt Pos y State.position.y - 1}
+			else 
+				Position = {AdjoinAt Pos x State.position.x - 1}
+			end
+		end
+		% (legacy) Position = {AdjoinAt Pos x if State.id.color == red then State.position.x+1 else State.position.x-1 end}
 		State
 	end
 
@@ -206,7 +217,7 @@ in
 
 		% TODO: change with real decisions
 		ID = State.id
-		Kind = gun
+		Kind = null
 		State
 	end
 
