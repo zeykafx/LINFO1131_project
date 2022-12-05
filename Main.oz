@@ -23,8 +23,7 @@ define
 	ManhattanDistance
 
 	proc {DrawFlags Flags Port}
-		case Flags of nil then
-			{Send WindowPort putMine(mine(pos:pt(x:8 y:10)))} % TODO: REMOVE
+		case Flags of nil then skip
 		[] Flag|T then
 			{Send Port putFlag(Flag)}
 			{DrawFlags T Port}
@@ -53,7 +52,7 @@ in
 			{TreatGameControllerStream 
 				Stream
 				state(
-					mines:[mine(pos:pt(x:8 y:10))] 	% TODO: remove the mine, this is just for testing step 4
+					mines:nil
 					flags:Input.flags 
 					playersState:{InitPlayersState 1}
 				)
@@ -94,7 +93,7 @@ in
 				playerState(id:ID position:OldPosition hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 				playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
 			end
-			NewState NewPosMapTileNbr CurrentPlayerState EnemyBaseTileNbr
+			NewState NewPosMapTileNbr CurrentPlayerState EnemyBaseTileNbr OtherPlayersAtPos
 		in
 			% get the player n°ID's state
 			CurrentPlayerState = {List.nth State.playersState ID.id}
@@ -111,9 +110,12 @@ in
 				% 2 = Player 2's base (blue)
 				% 3 = Walls
 				NewPosMapTileNbr = {List.nth {List.nth Input.map Position.x} Position.y}
+				
+				% check if there are other players at the position that the player wants to go to, if there is, we refuse the move
+				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == Position andthen Elem.id \= CurrentPlayerState.id end}
 
 				% check that the player isn't moving more than one tile in both directions, and that he isn't moving onto a wall or in the enemy base
-				if {Abs (CurrentPlayerState.position.x - Position.x)} =< 1 andthen {Abs (CurrentPlayerState.position.y - Position.y)} =< 1 andthen (NewPosMapTileNbr \= 3) andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) then
+				if {Abs (CurrentPlayerState.position.x - Position.x)} =< 1 andthen {Abs (CurrentPlayerState.position.y - Position.y)} =< 1 andthen (NewPosMapTileNbr \= 3) andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) andthen {List.length OtherPlayersAtPos} == 0 then
 
 					% if the move is valid, move the player and bind Status to true
 					NewState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID ModPos}}
@@ -165,6 +167,30 @@ in
 			end 
 		in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
+		end
+
+		%%% handles canGrabFlag(ID Flag ?Status) messages
+		fun {CheckCanGrabFlag State ID Flag ?Status}
+			CurrentPlayerState
+		in
+			% checks to see if the flag is in the flags list
+			if {List.member Flag State.flags} then
+				
+				CurrentPlayerState = {List.nth State.playersState ID.id}
+
+				% the player has to stand on the same time as the flag to be able to grab it
+				if Flag.pos == CurrentPlayerState.position then
+					% the player is on the tile, he can grab the flag
+					Status = true
+				else
+					% the player is too far
+					Status = false
+				end
+			else
+				Status = false
+			end
+			
+			State
 		end
 
 		%%% MINES
@@ -221,9 +247,9 @@ in
 			{Send WindowPort lifeUpdate(LocalID NewHp)}
 			{SendToAll sayDamageTaken(LocalID HpToRemove NewHp)}
 
-			if NewHp == 0 then
-				{SendToAll sayDeath(LocalID)}
-			end
+			% if NewHp == 0 then
+			% 	{SendToAll sayDeath(LocalID)}
+			% end
 
 			playerState(id:LocalID position:Position hp:NewHp mineReload:MineReload gunReload:GunReload flag:Flag)
 		end 
@@ -380,7 +406,7 @@ in
 					if CurrentPlayerState.mineReload == Input.mineCharge andthen DistanceFromWeaponPos == 0 andthen CurrentPlayerState.hp > 0 then
 
 						%  check that no other mines were placed there before
-						if {List.member FiredItem State.mines}  == false then
+						if {List.member FiredItem State.mines} == false then
 
 							% notify everyone that a mine was placed
 							{SendToAll sayMinePlaced(ID FiredItem)}
@@ -443,6 +469,9 @@ in
 
 			[] fireItem(ID FiredItem ?Status) then
 				{FireItem State ID FiredItem Status}
+
+			[] canGrabFlag(ID Flag ?Status) then
+				{CheckCanGrabFlag State ID Flag ?Status}
 		end
 	end
 
@@ -504,7 +533,7 @@ in
 			{Wait PlayersStateList}
 
 			if {List.nth PlayersStateList ID.id}.hp == 0 then
-				{System.show isDead(ID)}
+				{System.show 'Player '#ID#' is dead'}
 
 				% set the life to 0 on the gui, and then remove the soldier from the map
 				{Send WindowPort lifeUpdate(ID 0)}
@@ -538,15 +567,15 @@ in
 			% list of variables used in step 2, 3, and 4
 			NewPos PlayerID  HasMineExploded HasPlayerDied MoveStatus
 		in
-			{System.show 'step 2, 3, and 4'#ID}
-
 			%%%%%% STEP 2: if the player is alive ask where it wants to go
+			{System.show 'step 2'#ID}
 			{Send PlayerPort move(PlayerID NewPos)}
 			{Wait PlayerID}
 			{Wait NewPos}
 
 			%%%%%% STEP 3: check if the position the player wants to move to is a valid move, if it is not, the position stays the same,
 			%%%%%% otherwise notify everyone of the player's new position
+			{System.show 'step 3'#ID}
 
 			{Send GameControllerPort movePlayer(PlayerID NewPos MoveStatus)}
 			{Wait MoveStatus}
@@ -559,6 +588,7 @@ in
 				%%%%%% STEP 4: check if the player has moved on a mine
 				%%%%%% If so, apply the damage and notify everyone that the mine has exploded and notify everyone for each player that took damage.
 				%%%%%% If a player dies as a result, notify everyone and skip the rest of the ”turn” for that player.
+				{System.show 'step 4'#ID}
 				
 				{Send GameControllerPort checkMineAtPos(NewPos HasMineExploded)}
 				{Wait HasMineExploded}
@@ -678,6 +708,20 @@ in
 
 			%%%%%% STEP 7: Ask the player if it wants to grab the flag (only if it is possible).
 			%%%%%% Notify everyone if the flag has been picked up.
+			local
+				Status PlayerID Flag
+			in
+				{Send PlayerPort takeFlag(PlayerID Flag)}
+				{Wait PlayerID}
+				{Wait Flag}
+
+				{Send GameControllerPort canGrabFlag(ID Flag Status)}
+				if Status then
+					{SendToAll sayFlagTaken(ID Flag)}
+				else
+					{System.show 'Cannot grab flag'}
+				end
+			end
 
 			{PlayTurn PlayerPort ID step8}
 

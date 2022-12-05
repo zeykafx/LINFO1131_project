@@ -17,10 +17,7 @@ define
 
 	% Message functions
 	InitPosition
-	NewTurn
 	Move
-	IsDead
-	AskHealth
 	SayMoved
 	SayMineExplode
 	SayDeath
@@ -87,8 +84,6 @@ in
 	end
 
     proc{TreatStream Stream State}
-		% {System.show State}
-
         case Stream
             of H|T then {TreatStream T {MatchHead H State}}
         end
@@ -118,7 +113,6 @@ in
         end
     end
 
-	%%%% TODO Message functions
 
 	fun {PlayerStateModification PlayersState WantedID Function}
 		case PlayersState
@@ -146,8 +140,8 @@ in
 		ID = State.id
 		Pos = State.position
 
-		NearestEnemyFlag = {List.nth {List.filter Input.flags fun {$ Elem} Elem.color \= State.id.color end} 1}
-
+		NearestEnemyFlag = {List.filter Input.flags fun {$ Elem} Elem.color \= State.id.color end}.1
+		
 		DX = NearestEnemyFlag.pos.x - Pos.x
 		DY = NearestEnemyFlag.pos.y - Pos.y
 
@@ -170,7 +164,7 @@ in
 			else
 				PosX = NewPos
 			end
-		end
+		else PosX = Pos end
 
 
 		if DY < 0 then
@@ -192,8 +186,7 @@ in
 			else
 				PosY = NewPos
 			end
-		end
-
+		else PosY = Pos end
 
 		Position = PosY
 
@@ -204,9 +197,8 @@ in
 		NewState
 		% modifies the position inside the playersState list
 		fun {ModPos PlayerState}
-			ID OldPosition HP MineReload GunReload Flag
+			playerState(id:ID position:_ hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 		in
-			playerState(id:ID position:OldPosition hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
 		end
 		
@@ -305,9 +297,9 @@ in
 		% TODO: change with real decision
 		ID = State.id
 		% shoot at the nearest player that is within two tiles
-		NearestPlayers = {List.filter State.playersState fun {$ Elem} {ManhattanDistance Elem.position State.position} =< 2  andthen Elem.id.color \= State.id.color end}
+		NearestPlayers = {List.filter State.playersState fun {$ Elem} {ManhattanDistance Elem.position State.position} =< 2 andthen Elem.id.color \= State.id.color andthen Elem.hp > 0 end}
 		if {List.length NearestPlayers} >= 1 then
-			Kind = gun(pos: {List.nth NearestPlayers 1}.position) 
+			Kind = gun(pos:NearestPlayers.1.position)
 		else
 			Kind = null
 		end
@@ -315,18 +307,46 @@ in
 	end
 
 	fun {SayMinePlaced State ID Mine}
-		% TODO: place the mine
-		State
+		fun {ModCharge PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:_ gunReload:GunReload flag:Flag) = PlayerState
+		in
+			playerState(id:ID position:Position hp:HP mineReload:0 gunReload:GunReload flag:Flag)
+		end 
+		OutputState
+	in
+		if ID == State.id then
+			OutputState = {AdjoinAt State mineReloads 0}
+		else 
+			OutputState = State 
+		end
+
+		% add the mine to the list of mines and change the charge of the player that placed the mine
+		{AdjoinAt {AdjoinAt OutputState mines Mine|mines} playerState {PlayerStateModification OutputState.playersState ID ModCharge}}
 	end
 
 	fun {SayShoot State ID Position}
-		% TODO idk what to do here
-		State
+		% reset the charges
+		fun {ModCharge PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:_ flag:Flag) = PlayerState
+		in
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:0 flag:Flag)
+		end 
+		OutputState
+	in
+		% reset this player's charge
+		if ID == State.id then
+			OutputState = {AdjoinAt State gunReloads 0}
+		else 
+			OutputState = State 
+		end
+		
+		% reset the charge of the player in the list
+		{AdjoinAt OutputState playerState {PlayerStateModification OutputState.playersState ID ModCharge}}
 	end
 
 	fun {SayDeath State ID}
 		fun {ModDeath PlayerState}
-			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			playerState(id:ID position:Position hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 		in
 			playerState(id:ID position:Position hp:0 mineReload:MineReload gunReload:GunReload flag:Flag)
 		end 
@@ -336,7 +356,7 @@ in
 
 	fun {SayDamageTaken State ID Damage LifeLeft}
 		fun {ModHp PlayerState}
-			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			playerState(id:ID position:Position hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 		in
 			playerState(id:ID position:Position hp:LifeLeft mineReload:MineReload gunReload:GunReload flag:Flag)
 		end 
@@ -345,10 +365,21 @@ in
     end
 
 	fun {TakeFlag State ?ID ?Flag}
+		NearestEnemyFlag
+	in
 		{SimulatedThinking}
 
+		NearestEnemyFlag = {List.sort {List.filter Input.flags fun {$ Elem} Elem.color \= State.id.color end} fun {$ Element} {ManhattanDistance Element.pos State.position} end}
+
+		% try to grab the nearest flag if we are close enough
+		if NearestEnemyFlag.1.pos == State.position then
+			Flag = NearestEnemyFlag.1
+		else
+			Flag = null
+		end
+		
 		ID = State.id
-		Flag = null
+
 		State
 	end
 			
@@ -370,7 +401,7 @@ in
 
 	fun {Respawn State}
 		fun {ModHp PlayerState}
-			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			playerState(id:ID position:_ hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 			NewPos = {List.nth Input.spawnPoints ID.id}
 		in
 			playerState(id:ID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
@@ -384,7 +415,7 @@ in
 
 	fun {SayRespawn State ID}
 		fun {ModHp PlayerState}
-			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			playerState(id:ID position:_ hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 			NewPos = {List.nth Input.spawnPoints ID.id}
 		in
 			playerState(id:ID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
