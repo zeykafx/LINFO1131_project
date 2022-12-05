@@ -3,7 +3,6 @@ import
 	Input
 	OS
 	System
-	Number
 export
 	portPlayer:StartPlayer
 define
@@ -50,7 +49,7 @@ define
 
 	% The distance between two points measured along axes at right angles. In a plane with p1 at (x1, y1) and p2 at (x2, y2), it is |x1 - x2| + |y1 - y2|. 
 	fun {ManhattanDistance P1 P2}
-		{Number.abs (P1.x - P2.x)} + {Number.abs (P1.y - P2.y)}
+		{Abs (P1.x - P2.x)} + {Abs (P1.y - P2.y)}
 	end
 in
 	fun {InitOtherPlayers Nbr}
@@ -141,26 +140,63 @@ in
 	end
 
 	fun {Move State ?ID ?Position}
-		Pos
+		Pos NearestEnemyFlag PosX PosY DX DY
 	in
 		{SimulatedThinking}
 		ID = State.id
-		% TODO: remove this and replace with proper movements
 		Pos = State.position
-		if State.id.color == red then 
-			if State.position.x == Input.nColumn then 
-				Position = {AdjoinAt Pos y State.position.y + 1}
-			else 
-				Position = {AdjoinAt Pos x State.position.x + 1}
+
+		NearestEnemyFlag = {List.nth {List.filter Input.flags fun {$ Elem} Elem.color \= State.id.color end} 1}
+
+		DX = NearestEnemyFlag.pos.x - Pos.x
+		DY = NearestEnemyFlag.pos.y - Pos.y
+
+		if DX < 0 then
+			NewPos
+		in
+			NewPos = {AdjoinAt Pos x Pos.x - 1}
+			if {List.nth {List.nth Input.map NewPos.x} NewPos.y} == 3 then
+				PosX = {AdjoinAt NewPos x NewPos.x + 1}
+			else
+				PosX = NewPos
 			end
-		else 
-			if State.position.x == 1 then % there is no 0 in the coords
-				Position = {AdjoinAt Pos y State.position.y - 1}
-			else 
-				Position = {AdjoinAt Pos x State.position.x - 1}
+
+		elseif DX > 0 then
+			NewPos
+		in
+			NewPos = {AdjoinAt Pos x Pos.x + 1}
+			if {List.nth {List.nth Input.map NewPos.x} NewPos.y} == 3 then
+				PosX = {AdjoinAt NewPos x NewPos.x - 1}
+			else
+				PosX = NewPos
 			end
 		end
-		% (legacy) Position = {AdjoinAt Pos x if State.id.color == red then State.position.x+1 else State.position.x-1 end}
+
+
+		if DY < 0 then
+			NewPos
+		in
+			NewPos = {AdjoinAt PosX y Pos.y - 1}
+			if {List.nth {List.nth Input.map NewPos.x} NewPos.y} == 3 then
+				PosY = {AdjoinAt NewPos y NewPos.y + 1}
+			else
+				PosY = NewPos
+			end
+
+		elseif DY > 0 then
+			NewPos
+		in
+			NewPos = {AdjoinAt PosX y Pos.y + 1}
+			if {List.nth {List.nth Input.map NewPos.x} NewPos.y} == 3 then
+				PosY = {AdjoinAt NewPos y NewPos.y - 1}
+			else
+				PosY = NewPos
+			end
+		end
+
+
+		Position = PosY
+
 		State
 	end
 
@@ -217,7 +253,13 @@ in
 
 		% TODO: change with real decisions
 		ID = State.id
-		Kind = null
+		if State.gunReloads < Input.gunCharge then
+			Kind = gun
+		elseif State.mineReloads < Input.mineCharge then
+			Kind = mine
+		else
+			Kind = null
+		end
 		State
 	end
 
@@ -256,19 +298,29 @@ in
 	end
 
 	fun {FireItem State ?ID ?Kind}
+		NearestPlayers
+	in
 		{SimulatedThinking}
 
 		% TODO: change with real decision
 		ID = State.id
-		Kind = gun(pos:pt(x:State.position.x +1 y:State.position.y+1))
+		% shoot at the nearest player that is within two tiles
+		NearestPlayers = {List.filter State.playersState fun {$ Elem} {ManhattanDistance Elem.position State.position} =< 2  andthen Elem.id.color \= State.id.color end}
+		if {List.length NearestPlayers} >= 1 then
+			Kind = gun(pos: {List.nth NearestPlayers 1}.position) 
+		else
+			Kind = null
+		end
 		State
 	end
 
 	fun {SayMinePlaced State ID Mine}
+		% TODO: place the mine
 		State
 	end
 
 	fun {SayShoot State ID Position}
+		% TODO idk what to do here
 		State
 	end
 

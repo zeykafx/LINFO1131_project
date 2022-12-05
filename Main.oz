@@ -63,7 +63,7 @@ in
 	end
 
 
-	% State is like state(miense:[mines] flags:[flags] playerState(id:id(id:Nbr color:Color) position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag))
+	% State is like state(mines:[mines] flags:[flags] playerState(id:id(id:Nbr color:Color) position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag))
 
 
 	proc{TreatGameControllerStream Stream State}
@@ -287,14 +287,14 @@ in
 		end
 
 		% check if there is a player at a given position, used in step 6 (when shooting a gun)
-		fun {CheckPlayerAtPos PlayersState WantedPosition Function}
+		fun {ShootPlayerAtPos PlayersState WantedPosition Function}
 			case PlayersState
 			of nil then nil
 			[] playerState(id:ID position:PlayerPosition hp:_ mineReload:_ gunReload:_ flag:_)|T then
 				if (PlayerPosition == WantedPosition) then
 					{Function PlayersState.1}|T
 				else 
-					PlayersState.1|{CheckPlayerAtPos T WantedPosition Function}
+					PlayersState.1|{ShootPlayerAtPos T WantedPosition Function}
 				end
 			end
 		end
@@ -305,11 +305,37 @@ in
 			% then fire that weapon, guns have a range of 2 and mines are placed below the player
 			local
 				CurrentPlayerState DistanceFromWeaponPos HasMineExploded MinePosition Index
-				NewState NewState2
+				OutputState NewStateMineExplosion
+
 				fun {ModHp PlayerState}
 					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+					NewHP
 				in
-					playerState(id:ID position:Position hp:{Max HP-1 0} mineReload:MineReload gunReload:GunReload flag:Flag)
+					NewHP = {Max HP-1 0}
+
+					{Send WindowPort lifeUpdate(ID NewHP)}
+					{SendToAll sayDamageTaken(ID 1 NewHP)}
+
+					{System.show 'Player '#ID#' got shot at position'#Position#' has '#NewHP#'Remaining hp'}
+
+					playerState(id:ID position:Position hp:NewHP mineReload:MineReload gunReload:GunReload flag:Flag)
+				end 
+
+				fun {ModCharge PlayerState}
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+					NewGunCharge NewMineCharge
+				in
+					if {Record.label FiredItem} == gun then
+						NewGunCharge = 0
+						NewMineCharge = MineReload
+					elseif {Record.label FiredItem} == mine then
+						NewGunCharge = GunReload
+						NewMineCharge = 0
+					else
+						NewGunCharge = GunReload
+						NewMineCharge = MineReload
+					end
+					playerState(id:ID position:Position hp:HP mineReload:NewMineCharge gunReload:NewGunCharge flag:Flag)
 				end 
 			in
 				CurrentPlayerState = {List.nth State.playersState ID.id}
@@ -318,47 +344,66 @@ in
 				if {Record.label FiredItem} == gun then
 
 					% if the player has enough charges to fire, then the player can fire the gun
-					if CurrentPlayerState.gunReload == Input.gunCharge andthen DistanceFromWeaponPos =< 2 then
+					if CurrentPlayerState.gunReload == Input.gunCharge andthen DistanceFromWeaponPos =< 2 andthen DistanceFromWeaponPos > 0  andthen CurrentPlayerState.hp > 0 then
+						{SendToAll sayShoot(ID FiredItem.pos)}
+
 						% check for mines and detonate them if they were shot
 						HasMineExploded = {CheckMineAtPosHelper State.mines FiredItem.pos 1}
 
 						if HasMineExploded \= false then
 							mineExploded(MinePosition Index) = HasMineExploded
-							{System.show 'Mine exploded when getting shot at'#MinePosition}
+							{System.show 'Mine exploded when getting shot at, '#MinePosition}
 
-							{SendToAll sayMineExplode(mine(pos:MinePosition))}
-							{Send WindowPort removeMine(mine(pos:MinePosition))}
+							{SendToAll sayMineExplode(FiredItem)}
+							{Send WindowPort removeMine(FiredItem)}
 
-							% this is ugly, i know
-							% so you first apply the damage to the players, and then you remove the mine that exploded on the new state returned by ApplyDmgIfInRange
-							NewState = {AdjoinAt {AdjoinAt State playersState {ApplyDmgIfInRange State.playersState MinePosition}} mines {RemoveMine State.mines mine(pos:MinePosition)}}
+							% first apply the damage to the players, and then remove the mine that exploded on the new state returned by ApplyDmgIfInRange
+							NewStateMineExplosion = {AdjoinAt {AdjoinAt State playersState {ApplyDmgIfInRange State.playersState MinePosition}} mines {RemoveMine State.mines FiredItem}}
 							
 						else
-							NewState = State
+							NewStateMineExplosion = State
 						end
-						{System.show 'NewState.playersState'#NewState.playersState}
-						% check if there is any players at the position, if so, apply 1 dmg (Dont kill?)
-						NewState2 = {CheckPlayerAtPos NewState.playersState FiredItem.pos ModHp}
+
+						% check if there is any players at the position, if so, apply 1 dmg, but also remove the charge from the player that shot the gun (this is the second part of the adjoin, just here below)
+						OutputState = {AdjoinAt {AdjoinAt NewStateMineExplosion playersState {ShootPlayerAtPos NewStateMineExplosion.playersState FiredItem.pos ModHp}} playerState {PlayerStateModification NewStateMineExplosion.playersState ID ModCharge}}
+						Status = true
+
 					else
 						% the player cannot fire the gun yet or is too far
-						NewState2 = State
+						OutputState = State
 						Status = false
 					end
 					
 				elseif {Record.label FiredItem} == mine then
-					% if the player has enough charge for the mine
-					if CurrentPlayerState.mineReload == Input.mineCharge andthen DistanceFromWeaponPos == 0 then
-						skip
+					
+					% if the player has enough charge for the mine and the player is at the same position as the mine that he wants to place
+					if CurrentPlayerState.mineReload == Input.mineCharge andthen DistanceFromWeaponPos == 0 andthen CurrentPlayerState.hp > 0 then
+
+						%  check that no other mines were placed there before
+						if {List.member FiredItem State.mines}  == false then
+
+							% notify everyone that a mine was placed
+							{SendToAll sayMinePlaced(ID FiredItem)}
+
+							% add the mine to the state and change the player's charge for the mine
+							OutputState = {AdjoinAt {AdjoinAt State mines FiredItem|mines} playerState {PlayerStateModification State.playersState ID ModCharge}}
+						else
+							OutputState = State
+							Status = false
+						end
+
+						Status = true
 					else
 						Status = false
+						OutputState = State
 					end
-					NewState2 = State
+
 				else % else it was null, so do nothing
 					Status = false
-					NewState2 = State
+					OutputState = State
 				end
 				
-				NewState2
+				OutputState
 			end
 		end
 
@@ -426,10 +471,6 @@ in
 			{DoListPlayer NextPlayers NextColors ID+1}
 		end
 	end
-
-	% fun {Max X Y}
-	% 	if X > Y then X else Y end
-	% end
 
 
 	SimulatedThinking = proc{$} {Delay ({OS.rand} mod (Input.thinkMax - Input.thinkMin) + Input.thinkMin)} end
@@ -618,6 +659,11 @@ in
 				if KindOfWeaponToFire \= null then
 					% check that the player can fire the weapon and fire it,...
 					{Send GameControllerPort fireItem(ID KindOfWeaponToFire Status)}
+					{Wait Status}
+
+					if Status then
+						{System.show 'Player '#ID#' Fired a gun/placed a mine'}
+					end
 				else
 					% the player doesn't want to fire any weapon, so skip
 					skip
