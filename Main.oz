@@ -72,6 +72,8 @@ in
 				state(
 					mines:nil
 					flags:Input.flags 
+					foodTimerRunning: false
+					food:nil
 					playersState:{InitPlayersState 1}
 				)
 			}
@@ -80,7 +82,7 @@ in
 	end
 
 
-	% State is like state(mines:[mines] flags:[flags] playerState(id:id(id:Nbr color:Color) position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag))
+	% State is like state(mines:[mines] flags:[flags] shouldSpawnFood:boolean food:[food] playerState(id:id(id:Nbr color:Color) position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag))
 
 
 	proc{TreatGameControllerStream Stream State}
@@ -232,7 +234,7 @@ in
 				CurrentPlayerState = {List.nth State.playersState ID.id}
 
 				% the player has to stand on the same time as the flag to be able to grab it
-				if Flag.pos == CurrentPlayerState.position andthen CurrentPlayerState.flag == null then
+				if Flag.pos == CurrentPlayerState.position andthen CurrentPlayerState.flag == null andthen Flag.color \= ID.color then
 
 					% the player is on the tile, he can grab the flag
 					{System.show 'Player ID '#ID#' grabs the flag'#Flag}
@@ -283,6 +285,93 @@ in
 				Flag = null
 			end
 			State
+		end
+
+		%%% handles startFoodTimer(?TimerStatus) messages
+		fun {StartFoodTimer State ?TimerStatus}
+			OutputState
+		in
+			% start the timer only if no other timer were already started
+			if State.foodTimerRunning == false then
+				thread 
+					% after a random delay, send a message to the game controller to spawn food on a random tile
+					{Delay ({OS.rand} mod (Input.foodDelayMax - Input.foodDelayMin) + Input.foodDelayMin)}
+					{Send GameControllerPort spawnFood()}
+				end
+				OutputState = {AdjoinAt State foodTimerRunning true}
+				TimerStatus = true
+			else
+				OutputState = State
+				TimerStatus = false
+			end
+			OutputState
+		end
+
+		%%% handles spawnFood() messages
+		fun {SpawnFood State}
+			local
+				fun {RandomPosOnMap}
+					case ({OS.rand} mod 12) +1 % +1 because there is no pos 0 on the map
+					of X then
+						case ({OS.rand} mod 12) +1
+						of Y then
+							if {GetMapPos X Y} == 0 then
+								% if the random tile is not a wall or a base, then we can spawn food there
+									pt(x:X y:Y)
+							else
+								% if the position was a wall or a base, try again until we get a correct position
+								% super efficient i know :)
+								{RandomPosOnMap}
+							end
+						end
+					end
+				end
+
+				OutputState RandomPos
+			in
+				RandomPos = {RandomPosOnMap}
+				% add the new food in the food list, and also set the food timer gard to false
+				OutputState = {AdjoinAt {AdjoinAt State food food(pos: RandomPos)|State.food} foodTimerRunning false}
+
+				% broadcast that the food item appeared on the map
+				{SendToAll sayFoodAppeared(food(pos: RandomPos))}
+				{Send WindowPort putFood(food(pos: RandomPos))}
+
+				OutputState
+			end
+		end
+
+		%%% handles canEatFood(ID Food ?Status) messages
+		fun {CanEatFood State ID  Food ?Status}
+			local
+				OutputState NewPlayersState
+				fun {ModHp PlayerState}
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+				in
+					{Send WindowPort lifeUpdate(ID HP+1)}
+					% Not sure if we need to limit the HP to startHealt or not. use this if yes -> {Max HP+1 Input.startHealth}
+					playerState(id:ID position:Position hp:HP+1 mineReload:MineReload gunReload:GunReload flag:Flag)
+				end 
+			in
+				% check to see if the food is a valid food item, and to see if the player's position is the same as the food item's, then they can consume it
+				if {List.member Food State.food} andthen Food.pos == {List.nth State.playersState ID.id}.position then
+
+					{SendToAll sayFoodEaten(ID Food)}
+					{Send WindowPort removeFood(Food)}
+					
+					% give one HP to the player
+					NewPlayersState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
+
+					% remove the food from the food list
+					OutputState = {AdjoinAt NewPlayersState food {List.filter State.food fun {$ Elem} Elem \= Food end}}
+					
+					Status = true
+				else
+					OutputState = State
+					Status = false
+				end
+				OutputState
+			end
 		end
 
 		%%% MINES
@@ -595,6 +684,15 @@ in
 
 			[] wasPlayerCarryingFlag(ID ?Flag ?Status) then
 				{WasPlayerCarryingFlag State ID Flag Status}
+
+			[] startFoodTimer(?TimerStatus) then
+				{StartFoodTimer State ?TimerStatus}
+				
+			[] spawnFood() then
+				{SpawnFood State}
+
+			[] canEatFood(ID Food ?Status) then
+				{CanEatFood State ID Food Status}
 		end
 	end
 
@@ -641,132 +739,142 @@ in
 		case TurnStep
 		of nil then skip
 		[] step1 then
-			HP NewPlayersStateList
-		in
-			{PrintSteps step1#ID}
-			%%%%%% STEP 1: if the player is dead, then update the GUI and send to all players that player#ID is dead
-			%%%%%% wait for respawnDelay and then set the player's life count back to startHealth, 
-			%%%%%% reset the player's position and broadcast that player#ID is alive with startHealth HP
-
-
-			{Send GameControllerPort getPlayerHP(ID HP)}
-			{Wait HP}
-
-			if HP == 0 then
-				Flag WasCarryingFlagStatus DropFlagStatus
-			in
-				{Send GameControllerPort wasPlayerCarryingFlag(ID Flag WasCarryingFlagStatus)}
-				{Wait Flag}
-				{Wait WasCarryingFlagStatus}
-				if WasCarryingFlagStatus andthen Flag \= null then
-					{System.show 'Player ID '#ID#' dropped the flag'#Flag#' when dying'}
-					
-					{Send GameControllerPort dropFlag(ID Flag DropFlagStatus)}
-
-					if DropFlagStatus then
-						{SendToAll sayFlagDropped(ID Flag)}
-						{Send WindowPort putFlag(Flag)}
-						{Send WindowPort removeSoldierHasFlag(ID)}
-					else
-						{System.show 'Player ID'#ID#' cannot drop flag '#Flag}
-					end
-				end
-
-				{System.show 'Player '#ID#' is dead'}
-
-				% set the life to 0 on the gui, and then remove the soldier from the map
-				{Send WindowPort removeSoldier(ID)}
-				{Send WindowPort lifeUpdate(ID 0)}
-
-				{Send GameControllerPort killPlayer(ID)}
-
-				% broadcast that player#ID is dead
-				{SendToAll sayDeath(ID)}
-
-				{Delay Input.respawnDelay}
-
-				{Send GameControllerPort respawnPlayer(ID)}
-
-				% make the player respawn and then broadcast that 
-				{Send PlayerPort respawn()}
-				{SendToAll sayRespawn(ID)}
-
-				% reset the position of the player
-				
-				{Send WindowPort initSoldier(ID {List.nth Input.spawnPoints ID.id})}
-				{Send WindowPort lifeUpdate(ID Input.startHealth)}
-			else
-				% player is alive, do nothing
-				skip
-			end
-
-			{PlayTurn PlayerPort ID step234}
-
-		[] step234 then
-			% list of variables used in step 2, 3, and 4
-			NewPos PlayerID  HasMineExploded HasPlayerDied MoveStatus
-		in
-			%%%%%% STEP 2: if the player is alive ask where it wants to go
-			{PrintSteps 'step 2'#ID}
-
-			{Send PlayerPort move(PlayerID NewPos)}
-			{Wait NewPos}
-
-			%%%%%% STEP 3: check if the position the player wants to move to is a valid move, if it is not, the position stays the same,
-			%%%%%% otherwise notify everyone of the player's new position
-			{PrintSteps 'step 3'#ID}
-
-			{Send GameControllerPort movePlayer(PlayerID NewPos MoveStatus)}
-			{Wait MoveStatus}
-
-			% if the move is valid, then broadcast the movement and continue on with step 4
-			if MoveStatus then
-				{SendToAll sayMoved(PlayerID NewPos)}
-				{Send WindowPort moveSoldier(PlayerID NewPos)}
-
-				%%%%%% STEP 4: check if the player has moved on a mine
-				%%%%%% If so, apply the damage and notify everyone that the mine has exploded and notify everyone for each player that took damage.
-				%%%%%% If a player dies as a result, notify everyone and skip the rest of the ”turn” for that player.
-				{PrintSteps 'step 4'#ID}
-				
-				{Send GameControllerPort checkMineAtPos(NewPos HasMineExploded)}
-				{Wait HasMineExploded}
-
-				if HasMineExploded \= false then % HasMineExploded is a tuple when a mine has exploded and it's false when no mines exploded
-					% player moved on a mine
-					
-					% a mine deals 2 dmg to any player on the tile and 1 dmg to players within a 1 tile radius (following manhattan distance)
-					local
-						MinePosition Index NewState Status
-					in
-						% destructure the tuple returned to get the mine that exploded
-						mineExploded(MinePosition Index) = HasMineExploded
-
-						{System.show 'Mine exploded'#MinePosition}
-
-						{Send GameControllerPort mineExploded(mine(pos:MinePosition) Status)}
-						{Wait Status}
-
-						{SendToAll sayMineExplode(mine(pos:MinePosition))}
-						{Send WindowPort removeMine(mine(pos:MinePosition))}
-					end
-				end
-			end
-
 			local
-				HP
+				HP NewPlayersStateList
 			in
+				{PrintSteps step1#ID}
+				%%%%%% STEP 1: if the player is dead, then update the GUI and send to all players that player#ID is dead
+				%%%%%% wait for respawnDelay and then set the player's life count back to startHealth, 
+				%%%%%% reset the player's position and broadcast that player#ID is alive with startHealth HP
+
+
 				{Send GameControllerPort getPlayerHP(ID HP)}
 				{Wait HP}
+
 				if HP == 0 then
-					% if the current player died, then skip the rest of the turn
-					{PlayTurn PlayerPort ID endTurn}
+					Flag WasCarryingFlagStatus DropFlagStatus
+				in
+					{Send GameControllerPort wasPlayerCarryingFlag(ID Flag WasCarryingFlagStatus)}
+					{Wait Flag}
+					{Wait WasCarryingFlagStatus}
+					if WasCarryingFlagStatus andthen Flag \= null then
+						{System.show 'Player ID '#ID#' dropped the flag'#Flag#' when dying'}
+						
+						{Send GameControllerPort dropFlag(ID Flag DropFlagStatus)}
+
+						if DropFlagStatus then
+							{SendToAll sayFlagDropped(ID Flag)}
+							{Send WindowPort putFlag(Flag)}
+							{Send WindowPort removeSoldierHasFlag(ID)}
+						else
+							{System.show 'Player ID'#ID#' cannot drop flag '#Flag}
+						end
+					end
+
+					{System.show 'Player '#ID#' is dead'}
+
+					% set the life to 0 on the gui, and then remove the soldier from the map
+					{Send WindowPort removeSoldier(ID)}
+					{Send WindowPort lifeUpdate(ID 0)}
+
+					{Send GameControllerPort killPlayer(ID)}
+
+					% broadcast that player#ID is dead
+					{SendToAll sayDeath(ID)}
+
+					{Delay Input.respawnDelay}
+
+					{Send GameControllerPort respawnPlayer(ID)}
+
+					% make the player respawn and then broadcast that 
+					{Send PlayerPort respawn()}
+					{SendToAll sayRespawn(ID)}
+
+					% reset the position of the player
+					
+					{Send WindowPort initSoldier(ID {List.nth Input.spawnPoints ID.id})}
+					{Send WindowPort lifeUpdate(ID Input.startHealth)}
 				else
-					% continue the turn as usual if the player isn't dead
-					{PlayTurn PlayerPort ID step5}
+					% player is alive, do nothing
+					skip
+				end
+
+				{PlayTurn PlayerPort ID step234}
+			end
+		[] step234 then
+			local	
+				% list of variables used in step 2, 3, and 4
+				NewPos PlayerID  HasMineExploded HasPlayerDied MoveStatus FoodStatus
+			in
+				%%%%%% STEP 2: if the player is alive ask where it wants to go
+				{PrintSteps 'step 2'#ID}
+
+				{Send PlayerPort move(PlayerID NewPos)}
+				{Wait NewPos}
+
+				%%%%%% STEP 3: check if the position the player wants to move to is a valid move, if it is not, the position stays the same,
+				%%%%%% otherwise notify everyone of the player's new position
+				{PrintSteps 'step 3'#ID}
+
+				{Send GameControllerPort movePlayer(PlayerID NewPos MoveStatus)}
+				{Wait MoveStatus}
+
+				% if the move is valid, then broadcast the movement and continue on with step 4
+				if MoveStatus then
+					{SendToAll sayMoved(PlayerID NewPos)}
+					{Send WindowPort moveSoldier(PlayerID NewPos)}
+
+					%%%%%% STEP 4: check if the player has moved on a mine
+					%%%%%% If so, apply the damage and notify everyone that the mine has exploded and notify everyone for each player that took damage.
+					%%%%%% If a player dies as a result, notify everyone and skip the rest of the ”turn” for that player.
+					{PrintSteps 'step 4'#ID}
+					
+					{Send GameControllerPort checkMineAtPos(NewPos HasMineExploded)}
+					{Wait HasMineExploded}
+
+					if HasMineExploded \= false then % HasMineExploded is a tuple when a mine has exploded and it's false when no mines exploded
+						% player moved on a mine
+						
+						% a mine deals 2 dmg to any player on the tile and 1 dmg to players within a 1 tile radius (following manhattan distance)
+						local
+							MinePosition Index NewState Status
+						in
+							% destructure the tuple returned to get the mine that exploded
+							mineExploded(MinePosition Index) = HasMineExploded
+
+							{System.show 'Mine exploded'#MinePosition}
+
+							{Send GameControllerPort mineExploded(mine(pos:MinePosition) Status)}
+							{Wait Status}
+
+							{SendToAll sayMineExplode(mine(pos:MinePosition))}
+							{Send WindowPort removeMine(mine(pos:MinePosition))}
+						end
+					end
+
+
+					% check to see if the player can eat food at the new position, if they can, the food is removed and they gain 1 HP
+					{Send GameControllerPort canEatFood(ID food(pos: NewPos) FoodStatus)}
+					{Wait FoodStatus}
+					if FoodStatus then
+						{System.show 'Player ID'#ID#' ate food and gained 1 hp'}
+					end
+				end
+
+				local
+					HP
+				in
+					{Send GameControllerPort getPlayerHP(ID HP)}
+					{Wait HP}
+					if HP == 0 then
+						% if the current player died, then skip the rest of the turn
+						{PlayTurn PlayerPort ID endTurn}
+					else
+						% continue the turn as usual if the player isn't dead
+						{PlayTurn PlayerPort ID step5}
+					end
 				end
 			end
-
 		[] step5 then
 			{PrintSteps step5#ID}
 			
@@ -928,6 +1036,16 @@ in
 
 			%%%%%% STEP 10: The game Controller is also responsible for spawning food randomly on the map after a random time
 			%%%%%% between FoodDelayMin and FoodDelayMin has passed
+
+			local
+				Status
+			in
+				{Send GameControllerPort startFoodTimer(Status)}
+				if Status then
+					{System.show 'Timer for food spawn started'}
+				end
+			end
+
 			
 			{PlayTurn PlayerPort ID endTurn}
 		[] endTurn then

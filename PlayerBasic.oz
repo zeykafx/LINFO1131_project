@@ -152,7 +152,7 @@ in
 				% get the new pos tile nbr
 				NewPosMapTileNbr = {GetMapPos NewPos.x NewPos.y}
 				% check if there another player at the new pos
-				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == NewPos andthen Elem.id \= State.id end}	
+				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == NewPos andthen Elem.id \= State.id andthen Elem.hp > 0 end}	
 
 				% check if we will step into a mine
 				NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos NewPos} == 0 end}
@@ -307,11 +307,25 @@ in
 	end
 
 	fun {SayFoodAppeared State Food}
-		State
+		{AdjoinAt State food Food|State.food}
 	end
 
 	fun {SayFoodEaten State ID Food}
-		State
+		fun {ModHp PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+		in
+			playerState(id:ID position:Position hp:HP+1 mineReload:MineReload gunReload:GunReload flag:Flag)
+		end 
+		OutputState FoodRemovedState
+	in
+		FoodRemovedState = {AdjoinAt State food {List.filter State.food fun {$ Elem} Elem \= Food end}}
+
+		if ID.id == State.id.id then
+			OutputState = {AdjoinAt FoodRemovedState hp State.hp+1}
+		else
+			OutputState = FoodRemovedState
+		end
+		{AdjoinAt OutputState playersState {PlayerStateModification OutputState.playersState ID ModHp}}
 	end
 
 	fun {ChargeItem State ?ID ?Kind} 
@@ -436,7 +450,7 @@ in
 		fun {ModDeath PlayerState}
 			playerState(id:ID position:Position hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 		in
-			playerState(id:ID position:Position hp:0 mineReload:MineReload gunReload:GunReload flag:Flag)
+			playerState(id:ID position:Position hp:0 mineReload:MineReload gunReload:GunReload flag:null)
 		end
 		OutputState 
 	in

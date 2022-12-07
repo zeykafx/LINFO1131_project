@@ -74,8 +74,8 @@ in
 
 %%%% Thinking parameters %%%%
 
-    ThinkMin = 1 % 450 by default
-    ThinkMax = 5 % 500 by default
+    ThinkMin = 450 % 450 by default
+    ThinkMax = 500 % 500 by default
 
 %%%% Food apparition parameters %%%%
 
