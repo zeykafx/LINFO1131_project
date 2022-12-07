@@ -62,7 +62,8 @@ in
 
 %%%% Players description %%%%
 
-    Players = [player1 player2 player1 player2 player1 player2]
+    % two defenders and 2 attackers per teams
+    Players = [player060attacker player060attacker player060attacker player060attacker player060defender player060defender]
     Colors = [red blue red blue red blue]
     SpawnPoints = [pt(x:1 y:1) pt(x:12 y:10) pt(x:1 y:2) pt(x:12 y:11) pt(x:1 y:3) pt(x:12 y:12)]
     NbPlayer = 6
@@ -74,20 +75,20 @@ in
 
 %%%% Thinking parameters %%%%
 
-    ThinkMin = 450 % 450 by default
-    ThinkMax = 500 % 500 by default
+    ThinkMin = 200 % 450 by default
+    ThinkMax = 250 % 500 by default
 
 %%%% Food apparition parameters %%%%
 
-    FoodDelayMin = 25000
-    FoodDelayMax = 30000
+    FoodDelayMin = 12500 % 25000 by default
+    FoodDelayMax = 15000 % 30000 by default
 
 %%%% Charges
     GunCharge = 1
     MineCharge = 5
      
 %%%% Respawn
-    RespawnDelay = 25000
+    RespawnDelay = 12500 % 25000 by default
 
 %%%% Flags
     Flags = [flag(pos:pt(x:3 y:4) color:red) flag(pos:pt(x:10 y:9) color:blue)]

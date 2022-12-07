@@ -17,28 +17,17 @@ endif
 
 # TODO: Change these parameters as you wish
 INPUT := "Input.oz"
-PLAYER1 = "PlayerBasic.oz"
-PLAYER2 = "PlayerBasic.oz"
+PLAYER1 = "Player060Attacker.oz"
+PLAYER2 = "Player060Defender.oz"
 
+# TODO: replace with default makefile at the end of the project (except if we can keep this one?)
 
 all: compileAll run
 
-compileAll: Input.ozf Player1.ozf Player2.ozf PlayerManager.ozf GUI.ozf Main.ozf
+compileAll: Input.ozf Player060Attacker.ozf Player060Defender.ozf PlayerManager.ozf GUI.ozf Main.ozf
 
 # Compiles all .oz files into .ozf files
 %.ozf: %.oz
-	$(OZC) $(FLAGS) -c $^
-
-# overrides the previous rules for the players
-# TODO: remove this when we have the two players created
-
-# players:
-# 	$(OZC) -c ${PLAYER1} -o "Player1.ozf"
-# 	$(OZC) -c ${PLAYER2} -o "Player2.ozf"
-Player%.ozf: PlayerBasic.oz
-	$(OZC) $(FLAGS) -c $^ -o $@  
-
-PlayerManager.ozf: PlayerManager.oz
 	$(OZC) $(FLAGS) -c $^
 
 run:

@@ -71,18 +71,18 @@ in
 			{TreatStream
 			 	Stream
 				state(
-					id:id(name:basic color:Color id:ID)
+					id:id(name:player060defender color:Color id:ID)
 					position:{List.nth Input.spawnPoints ID}
 					map:Input.map
 					food:nil
 					hp:Input.startHealth
 					flag:null
-					friendlyHasFlag: false
 					mineReloads:0
 					gunReloads:0
 					startPosition:{List.nth Input.spawnPoints ID}
 					mines:nil
-					enemyFlag: {List.filter Input.flags fun {$ Elem} Elem.color \= Color end}.1
+					friendyFlag: {List.filter Input.flags fun {$ Elem} Elem.color == Color end}.1
+					enemyHasFlag: false
 					playersState:{InitOtherPlayers 1} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
@@ -117,6 +117,10 @@ in
 			[] sayFlagDropped(ID Flag) then {SayFlagDropped State ID Flag}
 			[] respawn() then {Respawn State}
 			[] sayRespawn(ID) then {SayRespawn State ID}
+			
+			[] _ then % if no messages match, instead of crashing we just return the unmodified state
+				{System.show 'Player ID'#State.id#' got an unknown message, ignoring...'} 
+				State
         end
     end
 
@@ -140,6 +144,7 @@ in
 		State
 	end
 
+	% has custom defender logic
 	fun {Move State ?ID ?Position}
 
 		% returns true if the move to the new tile is valid, returns false otherwise
@@ -179,23 +184,19 @@ in
 
 		Pos = State.position
 
-		% make the player go to the flag if they dont have it, else make them go to the base
-		if State.flag == null andthen State.friendlyHasFlag == false then
-			DX = State.enemyFlag.pos.x - Pos.x
-			DY = State.enemyFlag.pos.y - Pos.y	
+		% make the defenders stay near the friendly flag, or near the friendly with the flag
+		if State.enemyHasFlag == false then
+			DX = State.friendyFlag.pos.x - Pos.x
+			DY = State.friendyFlag.pos.y - Pos.y	
 		
 		else
-			% make the player go to the base
-			BasePosition
+			% make the player go to the friendly that is carrying the flag
+			FriendlyWithFlagPos
 		in
-			if State.id.color == red then
-				BasePosition = pt(x:1 y:1)
-			else
-				BasePosition = pt(x:Input.nRow y:Input.nColumn)
-			end
+			FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null end}.1.position
 
-			DX = BasePosition.x - Pos.x
-			DY = BasePosition.y - Pos.y	
+			DX = FriendlyWithFlagPos.x - Pos.x
+			DY = FriendlyWithFlagPos.y - Pos.y	
 		end
 
 		if DX < 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x - 1}} then
@@ -218,7 +219,7 @@ in
 			NearestMines SafeDirectionX SafeDirectionY
 		in
 			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == 1 end}
-
+			{System.show 'NearestMines'#NearestMines}
 			if {List.length NearestMines} > 0 then
 				% if one of these is 0, you want to get away from that axis
 				% e.g. player is on (3, 3), mine on (2, 3), and flag is on (1, 3): the player wants to go up, but SafeDirectionY will be 0
@@ -249,13 +250,13 @@ in
 				end
 			[] 2 then
 				if SafeDirectionY == 0 then
-					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRows then Pos.x - 1 else Pos.x + 1 end}
+					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRow then Pos.x - 1 else Pos.x + 1 end}
 				else
 					Position = {AdjoinAt Pos y Pos.y + 1}
 				end
 			[] 3 then
 				if SafeDirectionY == 0 then
-					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRows then Pos.x - 1 else Pos.x + 1 end}
+					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRow then Pos.x - 1 else Pos.x + 1 end}
 				else
 					Position = {AdjoinAt Pos y Pos.y - 1}
 				end
@@ -376,31 +377,26 @@ in
 
 	end
 
+	% has custom defender logic
 	fun {FireItem State ?ID ?Kind}
-		NearestPlayers NearestMines
+		NearestPlayers
 	in
 		{SimulatedThinking}
 
 		ID = State.id
 
+		% the defenders won't shoot at mines but they will drop mines near the friendly flag
+
 		% find the nearest player that is within two tiles
 		NearestPlayers = {List.filter State.playersState fun {$ Elem} {ManhattanDistance Elem.position State.position} =< 2 andthen Elem.id.color \= State.id.color andthen Elem.hp > 0 end}
 		
-		% TODO: make another player type that drops mines but doesn't shoot them
-		% find the nearest mine that is within two tiles but also not at our feet, or in the blast radius (so only 2 tiles away)
-		NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos State.position} == 2 end}
+		if State.gunReloads == Input.gunCharge andthen {List.length NearestPlayers} >= 1 then
 
-		if State.gunReloads == Input.gunCharge andthen ({List.length NearestPlayers} >= 1 orelse {List.length NearestMines} >= 1) then
+			Kind = gun(pos:NearestPlayers.1.position)
 
-			if {List.length NearestPlayers} >= 1 then
-				Kind = gun(pos:NearestPlayers.1.position)
-
-			elseif {List.length NearestMines} >= 1 then
-				Kind = gun(pos:NearestMines.1.pos)
-			end
-
-		% elseif State.mineReloads == Input.mineCharge andthen {OS.rand} mod 10 == 1 then
-		% 	Kind = mine(pos: State.position)
+		% place mines around the flag
+		elseif State.mineReloads == Input.mineCharge andthen {OS.rand} mod 5 == 1 andthen {ManhattanDistance State.position State.friendyFlag.pos} =< 4 then % dont place mines too often
+			Kind = mine(pos: State.position)
 		else
 			Kind = null
 		end
@@ -479,20 +475,13 @@ in
 		{AdjoinAt OutputState playersState {PlayerStateModification OutputState.playersState ID ModHp}}
     end
 
+	% has custom defender logic
 	fun {TakeFlag State ?ID ?Flag}
-		NearestEnemyFlag 
-		BaseColor = if State.id.color == red then 1 else 2 end 
-	in
 		{SimulatedThinking}
 		ID = State.id
 
-		% try to grab the nearest flag if we are close enough, and also dont pick up a flag already in the base 
-		if State.enemyFlag \= null andthen State.enemyFlag.pos == State.position andthen {GetMapPos State.position.x State.position.y} \= BaseColor then
-			{System.show 'Player ID '#ID#' is trying to grab the flag '#State.enemyFlag}
-			Flag = State.enemyFlag
-		else
-			Flag = null
-		end
+		% defenders will never grab the flag
+		Flag = null
 		
 		State
 	end
@@ -511,6 +500,7 @@ in
 		State
 	end
 
+	% has custom defender logic
 	fun {SayFlagTaken State ID Flag}
 		fun {ModFlag PlayerState}
 			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:_) = PlayerState
@@ -527,12 +517,11 @@ in
 			OutputState = State
 		end
 
-		% if a teammate is carrying the flag
-		if ID.color == State.id.color then 
+		% if an enemy is carrying the flag
+		if ID.color \= State.id.color then 
 
 			% remove the enemy flag from the list since the flag is currently being carried by another player and is therefore not at the original position anymore
-			% TODO: instead of this, make the players target other players whenever State.enemyFlag is null
-			FlagState = {AdjoinAt {AdjoinAt OutputState enemyFlag null} friendlyHasFlag true}
+			FlagState = {AdjoinAt {AdjoinAt OutputState friendyFlag null} enemyHasFlag true}
 
 		else 
 			% if an enemy is carrying this player's flag
@@ -542,6 +531,7 @@ in
 		{AdjoinAt FlagState playersState {PlayerStateModification FlagState.playersState ID ModFlag}}
 	end
 
+	% has custom defender logic
 	fun {SayFlagDropped State ID Flag}
 		fun {ModFlag PlayerState}
 			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:_) = PlayerState
@@ -556,8 +546,8 @@ in
 			OutputState = State
 		end
 
-		if ID.color == State.id.color then
-			FlagState = {AdjoinAt {AdjoinAt OutputState enemyFlag Flag} friendlyHasFlag false}
+		if ID.color \= State.id.color then
+			FlagState = {AdjoinAt {AdjoinAt OutputState friendyFlag Flag} enemyHasFlag false}
 		else
 			FlagState = OutputState
 		end
