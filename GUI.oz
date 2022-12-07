@@ -36,6 +36,8 @@ define
 	StateModification
 
 	UpdateLife
+	SoldierHasFlag
+	RemoveSoldierHasFlag
 in
 
 %%%%% Build the initial window and set it up (call only once)
@@ -116,7 +118,7 @@ in
 			pt(x:X y:Y) = Position
 			id(id:Id color:Color name:_) = ID
 
-			LabelSub = label(text:"S" handle:Handle borderwidth:5 relief:raised bg:Color ipadx:5 ipady:5)
+			LabelSub = label(text:'S'#ID.id handle:Handle borderwidth:5 relief:raised bg:Color ipadx:5 ipady:5)
 			LabelScore = label(text:Input.startHealth borderwidth:5 handle:HandleScore relief:solid bg:Color ipadx:5 ipady:5)
 			{Grid.grid configure(LabelSub row:X+1 column:Y+1 sticky:wesn)}
 			{Grid.score configure(LabelScore row:1 column:Id sticky:wesn)}
@@ -126,7 +128,6 @@ in
 	end
 
 	fun{MoveSoldier Position}
-		{System.show moveSoldier(Position)}
 		fun{$ Grid State}
 			ID HandleScore Handle Mine X Y Flag Food
 		in
@@ -136,6 +137,28 @@ in
 			{Grid.grid configure(Handle row:X+1 column:Y+1 sticky:wesn)}
 			{Handle 'raise'()}
 			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food)
+		end
+	end
+
+	% changes the soldier's label to include F if they are carrying the flag
+	fun {SoldierHasFlag}
+		fun{$ Grid State}
+			ID Handle
+		in
+			guiSoldier(id:ID score:_ soldier:Handle mines:_ flags:_ foods:_) = State
+			{Handle set(text:'S'#ID.id#'F')}
+			State
+		end
+	end
+
+	% reset the player's label if they dropped the flag
+	fun {RemoveSoldierHasFlag}
+		fun{$ Grid State}
+			ID Handle
+		in
+			guiSoldier(id:ID score:_ soldier:Handle mines:_ flags:_ foods:_) = State
+			{Handle set(text:'S'#ID.id)}
+			State
 		end
 	end
   
@@ -354,6 +377,10 @@ in
 			{TreatStream T Grid {RemoveSoldier Grid ID State}}
 		[] explosion(Position)|T then
 			{TreatStream T Grid State}
+		[] addSoldierHasFlag(ID)|T then
+			{TreatStream T Grid {StateModification Grid ID State {SoldierHasFlag}}}
+		[] removeSoldierHasFlag(ID)|T then
+			{TreatStream T Grid {StateModification Grid ID State {RemoveSoldierHasFlag}}}
 		[] _|T then
 			{TreatStream T Grid State}
 		end

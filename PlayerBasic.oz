@@ -48,6 +48,11 @@ define
 	fun {ManhattanDistance P1 P2}
 		{Abs (P1.x - P2.x)} + {Abs (P1.y - P2.y)}
 	end
+
+	fun {GetMapPos X Y}
+		{List.nth {List.nth Input.map X} Y}
+	end
+
 in
 	fun {InitOtherPlayers Nbr}
 		if Nbr > Input.nbPlayer then
@@ -72,10 +77,12 @@ in
 					food:nil
 					hp:Input.startHealth
 					flag:null
+					friendlyHasFlag: false
 					mineReloads:0
 					gunReloads:0
 					startPosition:{List.nth Input.spawnPoints ID}
 					mines:nil
+					enemyFlag: {List.filter Input.flags fun {$ Elem} Elem.color \= Color end}.1
 					playersState:{InitOtherPlayers 1} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
@@ -107,7 +114,7 @@ in
 			[] takeFlag(?ID ?Flag) then {TakeFlag State ID Flag}
 			[] dropFlag(?ID ?Flag) then {DropFlag State ID Flag}
 			[] sayFlagTaken(ID Flag) then {SayFlagTaken State ID Flag}
-			[] sayFlagDropped(ID Flag) then {SayFlagDropped State ID flag}
+			[] sayFlagDropped(ID Flag) then {SayFlagDropped State ID Flag}
 			[] respawn() then {Respawn State}
 			[] sayRespawn(ID) then {SayRespawn State ID}
         end
@@ -134,61 +141,128 @@ in
 	end
 
 	fun {Move State ?ID ?Position}
-		Pos NearestEnemyFlag PosX PosY DX DY
+
+		% returns true if the move to the new tile is valid, returns false otherwise
+		fun {IsValidMove NewPos}
+			EnemyBaseTileNbr NewPosMapTileNbr OtherPlayersAtPos NearestMines
+		in
+			if (NewPos.x =< Input.nRow) andthen (NewPos.y =< Input.nColumn) andthen (NewPos.x > 0) andthen (NewPos.y > 0) then
+				% get the enemy base tile nbr
+				EnemyBaseTileNbr = if State.id.color == red then 2 else 1 end 
+				% get the new pos tile nbr
+				NewPosMapTileNbr = {GetMapPos NewPos.x NewPos.y}
+				% check if there another player at the new pos
+				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == NewPos andthen Elem.id \= State.id end}	
+
+				% check if we will step into a mine
+				NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos NewPos} == 0 end}
+
+				if {ManhattanDistance State.position NewPos} =< 1
+					andthen (NewPosMapTileNbr \= 3) 
+						andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) 
+							andthen {List.length OtherPlayersAtPos} == 0 
+								andthen {List.length NearestMines} == 0 then
+					true
+				else
+					false
+				end
+				
+			else
+				false
+			end
+		end
+
+		Pos DX DY
 	in
 		{SimulatedThinking}
 		ID = State.id
+
 		Pos = State.position
 
-		NearestEnemyFlag = {List.filter Input.flags fun {$ Elem} Elem.color \= State.id.color end}.1
+		% make the player go to the flag if they dont have it, else make them go to the base
+		if State.flag == null andthen State.friendlyHasFlag == false then
+			DX = State.enemyFlag.pos.x - Pos.x
+			DY = State.enemyFlag.pos.y - Pos.y	
 		
-		DX = NearestEnemyFlag.pos.x - Pos.x
-		DY = NearestEnemyFlag.pos.y - Pos.y
-
-		if DX < 0 then
-			NewPos
+		else
+			% make the player go to the base
+			BasePosition
 		in
-			NewPos = {AdjoinAt Pos x Pos.x - 1}
-			if {List.nth {List.nth Input.map NewPos.x} NewPos.y} == 3 then
-				PosX = {AdjoinAt NewPos x NewPos.x + 1}
+			if State.id.color == red then
+				BasePosition = pt(x:1 y:1)
 			else
-				PosX = NewPos
+				BasePosition = pt(x:Input.nRow y:Input.nColumn)
 			end
 
-		elseif DX > 0 then
-			NewPos
+			DX = BasePosition.x - Pos.x
+			DY = BasePosition.y - Pos.y	
+		end
+
+		if DX < 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x - 1}} then
+
+			Position = {AdjoinAt Pos x Pos.x - 1}
+
+		elseif DX > 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x + 1}} then
+
+			Position = {AdjoinAt Pos x Pos.x + 1}
+
+		elseif DY < 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y - 1}} then
+
+			Position = {AdjoinAt Pos y Pos.y - 1}
+
+		elseif DY > 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y + 1}} then
+
+			Position = {AdjoinAt Pos y Pos.y + 1}
+
+		else 
+			NearestMines SafeDirectionX SafeDirectionY
 		in
-			NewPos = {AdjoinAt Pos x Pos.x + 1}
-			if {List.nth {List.nth Input.map NewPos.x} NewPos.y} == 3 then
-				PosX = {AdjoinAt NewPos x NewPos.x - 1}
-			else
-				PosX = NewPos
-			end
-		else PosX = Pos end
+			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == 1 end}
 
-
-		if DY < 0 then
-			NewPos
-		in
-			NewPos = {AdjoinAt PosX y Pos.y - 1}
-			if {List.nth {List.nth Input.map NewPos.x} NewPos.y} == 3 then
-				PosY = {AdjoinAt NewPos y NewPos.y + 1}
+			if {List.length NearestMines} > 0 then
+				% if one of these is 0, you want to get away from that axis
+				% e.g. player is on (3, 3), mine on (2, 3), and flag is on (1, 3): the player wants to go up, but SafeDirectionY will be 0
+				% since it's 0 we will just go left or right on the X axis (while remaining in the map)
+				SafeDirectionX = NearestMines.1.pos.x - Pos.x
+				SafeDirectionY = NearestMines.1.pos.y - Pos.y
 			else
-				PosY = NewPos
+				SafeDirectionX = 1
+				SafeDirectionY = 1
 			end
 
-		elseif DY > 0 then
-			NewPos
-		in
-			NewPos = {AdjoinAt PosX y Pos.y + 1}
-			if {List.nth {List.nth Input.map NewPos.x} NewPos.y} == 3 then
-				PosY = {AdjoinAt NewPos y NewPos.y - 1}
-			else
-				PosY = NewPos
-			end
-		else PosY = Pos end
 
-		Position = PosY
+			% it seems like we are stuck....
+			% try to move in a random direction, with, doesn't matter if it's not valid, we'll try again next round, and again, until we're not stuck anymore
+			case {OS.rand} mod 4
+			of 0 then
+				% avoid mines, we check SafeDirectionX since this random move was going to make the player move up in the X axis
+				if SafeDirectionX == 0 then
+					Position = {AdjoinAt Pos y if Pos.y + 1 == Input.nColumn then Pos.y - 1 else Pos.y + 1 end}
+				else
+					Position = {AdjoinAt Pos x Pos.x + 1}
+				end
+			[] 1 then
+				if SafeDirectionX == 0 then
+					Position = {AdjoinAt Pos y if Pos.y + 1 == Input.nColumn then Pos.y - 1 else Pos.y + 1 end}
+				else
+					Position = {AdjoinAt Pos x Pos.x - 1}
+				end
+			[] 2 then
+				if SafeDirectionY == 0 then
+					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRows then Pos.x - 1 else Pos.x + 1 end}
+				else
+					Position = {AdjoinAt Pos y Pos.y + 1}
+				end
+			[] 3 then
+				if SafeDirectionY == 0 then
+					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRows then Pos.x - 1 else Pos.x + 1 end}
+				else
+					Position = {AdjoinAt Pos y Pos.y - 1}
+				end
+			end
+			
+		end
+
 
 		State
 	end
@@ -204,7 +278,7 @@ in
 		
 	in
 		% if the player that moved is the the current player, then also change the position in the state
-		if ID == State.id then
+		if ID.id == State.id.id then
 			NewState = {AdjoinAt State position Position}
 		else
 			NewState = State
@@ -243,7 +317,6 @@ in
 	fun {ChargeItem State ?ID ?Kind} 
 		{SimulatedThinking}
 
-		% TODO: change with real decisions
 		ID = State.id
 		if State.gunReloads < Input.gunCharge then
 			Kind = gun
@@ -274,7 +347,7 @@ in
 		NewState
 	in
 		% this player charged their gun or mine
-		if ID == State.id then
+		if ID.id == State.id.id then
 			% increase the state charge counter
 			if Kind == gun then
 				NewState = {AdjoinAt State gunReloads State.gunReloads+1}
@@ -290,19 +363,34 @@ in
 	end
 
 	fun {FireItem State ?ID ?Kind}
-		NearestPlayers
+		NearestPlayers NearestMines
 	in
 		{SimulatedThinking}
 
-		% TODO: change with real decision
 		ID = State.id
-		% shoot at the nearest player that is within two tiles
+
+		% find the nearest player that is within two tiles
 		NearestPlayers = {List.filter State.playersState fun {$ Elem} {ManhattanDistance Elem.position State.position} =< 2 andthen Elem.id.color \= State.id.color andthen Elem.hp > 0 end}
-		if {List.length NearestPlayers} >= 1 then
-			Kind = gun(pos:NearestPlayers.1.position)
+		
+		% TODO: make another player type that drops mines but doesn't shoot them
+		% find the nearest mine that is within two tiles but also not at our feet, or in the blast radius (so only 2 tiles away)
+		NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos State.position} == 2 end}
+
+		if State.gunReloads == Input.gunCharge andthen ({List.length NearestPlayers} >= 1 orelse {List.length NearestMines} >= 1) then
+
+			if {List.length NearestPlayers} >= 1 then
+				Kind = gun(pos:NearestPlayers.1.position)
+
+			elseif {List.length NearestMines} >= 1 then
+				Kind = gun(pos:NearestMines.1.pos)
+			end
+
+		% elseif State.mineReloads == Input.mineCharge andthen {OS.rand} mod 10 == 1 then
+		% 	Kind = mine(pos: State.position)
 		else
 			Kind = null
 		end
+	
 		State
 	end
 
@@ -314,34 +402,34 @@ in
 		end 
 		OutputState
 	in
-		if ID == State.id then
+		if ID.id == State.id.id then
 			OutputState = {AdjoinAt State mineReloads 0}
 		else 
 			OutputState = State 
 		end
 
 		% add the mine to the list of mines and change the charge of the player that placed the mine
-		{AdjoinAt {AdjoinAt OutputState mines Mine|mines} playerState {PlayerStateModification OutputState.playersState ID ModCharge}}
+		{AdjoinAt {AdjoinAt OutputState mines Mine|State.mines} playersState {PlayerStateModification OutputState.playersState ID ModCharge}}
 	end
 
 	fun {SayShoot State ID Position}
 		% reset the charges
 		fun {ModCharge PlayerState}
-			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:_ flag:Flag) = PlayerState
+			playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:_ flag:Flag) = PlayerState
 		in
-			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:0 flag:Flag)
+			playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:0 flag:Flag)
 		end 
 		OutputState
 	in
 		% reset this player's charge
-		if ID == State.id then
+		if ID.id == State.id.id then
 			OutputState = {AdjoinAt State gunReloads 0}
 		else 
 			OutputState = State 
 		end
 		
 		% reset the charge of the player in the list
-		{AdjoinAt OutputState playerState {PlayerStateModification OutputState.playersState ID ModCharge}}
+		{AdjoinAt OutputState playersState {PlayerStateModification OutputState.playersState ID ModCharge}}
 	end
 
 	fun {SayDeath State ID}
@@ -349,9 +437,16 @@ in
 			playerState(id:ID position:Position hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
 		in
 			playerState(id:ID position:Position hp:0 mineReload:MineReload gunReload:GunReload flag:Flag)
-		end 
+		end
+		OutputState 
 	in
-		{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModDeath}}
+		if ID.id == State.id.id then
+			OutputState = {AdjoinAt State hp 0}
+		else
+			OutputState = State
+		end
+
+		{AdjoinAt OutputState playersState {PlayerStateModification OutputState.playersState ID ModDeath}}
 	end
 
 	fun {SayDamageTaken State ID Damage LifeLeft}
@@ -360,57 +455,112 @@ in
 		in
 			playerState(id:ID position:Position hp:LifeLeft mineReload:MineReload gunReload:GunReload flag:Flag)
 		end 
+		OutputState 
 	in
-		{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
+		if ID.id == State.id.id then
+			OutputState = {AdjoinAt State hp LifeLeft}
+		else
+			OutputState = State
+		end
+		{AdjoinAt OutputState playersState {PlayerStateModification OutputState.playersState ID ModHp}}
     end
 
 	fun {TakeFlag State ?ID ?Flag}
-		NearestEnemyFlag
+		NearestEnemyFlag 
+		BaseColor = if State.id.color == red then 1 else 2 end 
 	in
 		{SimulatedThinking}
+		ID = State.id
 
-		NearestEnemyFlag = {List.sort {List.filter Input.flags fun {$ Elem} Elem.color \= State.id.color end} fun {$ Element} {ManhattanDistance Element.pos State.position} end}
-
-		% try to grab the nearest flag if we are close enough
-		if NearestEnemyFlag.1.pos == State.position then
-			Flag = NearestEnemyFlag.1
+		% try to grab the nearest flag if we are close enough, and also dont pick up a flag already in the base 
+		if State.enemyFlag \= null andthen State.enemyFlag.pos == State.position andthen {GetMapPos State.enemyFlag.pos.x State.enemyFlag.pos.y} \= BaseColor then
+			{System.show 'Player ID '#ID#' is trying to grab the flag '#State.enemyFlag}
+			Flag = State.enemyFlag
 		else
 			Flag = null
 		end
 		
-		ID = State.id
-
 		State
 	end
 			
 	fun {DropFlag State ?ID ?Flag}
+		BaseColor = if State.id.color == red then 1 else 2 end 
+	in
 		{SimulatedThinking}
-
 		ID = State.id
-		Flag = null
+		if State.flag \= null andthen {GetMapPos State.position.x State.position.y} == BaseColor then
+			Flag = {AdjoinAt State.flag pos State.position}
+		else
+			Flag = null
+		end
+
 		State
 	end
 
 	fun {SayFlagTaken State ID Flag}
-		State
+		fun {ModFlag PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:_) = PlayerState
+		in
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
+		end 
+		OutputState FlagState
+	in
+		% if this player is carrying the flag
+		if ID.id == State.id.id then
+			OutputState = {AdjoinAt State flag Flag}
+		
+		else
+			OutputState = State
+		end
+
+		% if a teammate is carrying the flag
+		if ID.color == State.id.color then 
+
+			% remove the enemy flag from the list since the flag is currently being carried by another player and is therefore not at the original position anymore
+			% TODO: instead of this, make the players target other players whenever State.enemyFlag is null
+			FlagState = {AdjoinAt {AdjoinAt State enemyFlag null} friendlyHasFlag true}
+
+		else 
+			% if an enemy is carrying this player's flag
+			FlagState = OutputState 
+		end
+
+		{AdjoinAt FlagState playersState {PlayerStateModification FlagState.playersState ID ModFlag}}
 	end
 
 	fun {SayFlagDropped State ID Flag}
-		State
+		fun {ModFlag PlayerState}
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:_) = PlayerState
+		in
+			playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:null)
+		end 
+		OutputState FlagState
+	in
+		if ID.id == State.id.id then
+			OutputState = {AdjoinAt State flag null}
+		else
+			OutputState = State
+		end
+
+		if ID.color == State.id.color then
+			FlagState = {AdjoinAt {AdjoinAt OutputState enemyFlag Flag} friendlyHasFlag false}
+		else
+			FlagState = OutputState
+		end
+	
+		{AdjoinAt FlagState playersState {PlayerStateModification FlagState.playersState ID ModFlag}}
 	end
 
 	fun {Respawn State}
 		fun {ModHp PlayerState}
 			playerState(id:ID position:_ hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
-			NewPos = {List.nth Input.spawnPoints ID.id}
 		in
-			playerState(id:ID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
+			playerState(id:ID position:State.startPosition hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
 		end
-		NewState NewState2
+		NewState
 	in
-		NewState = {AdjoinAt State hp Input.startHealth}
-		NewState2 = {AdjoinAt NewState position {List.nth Input.spawnPoints NewState.id.id}}
-		{AdjoinAt NewState2 playersState {PlayerStateModification NewState2.playersState NewState2.id ModHp}}
+		NewState = {AdjoinAt {AdjoinAt State hp Input.startHealth} position State.startPosition}
+		{AdjoinAt NewState playersState {PlayerStateModification NewState.playersState NewState.id ModHp}}
 	end
 
 	fun {SayRespawn State ID}
@@ -421,6 +571,10 @@ in
 			playerState(id:ID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
 		end 
 	in
-		{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
+		if ID \= State.id then
+			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
+		else
+			State
+		end
 	end
 end
