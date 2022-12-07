@@ -37,6 +37,10 @@ define
 	InitOtherPlayers
 	Respawn
 	SayRespawn
+	SaySpeedBoostTaken
+	SaySpeedBoostWoreOff
+	SayAdrenalineTaken 
+	SayAdrenalineWoreOff
 
 	% Helper functions
 	RandomInRange = fun {$ Min Max} Min+({OS.rand}mod(Max-Min+1)) end
@@ -83,6 +87,7 @@ in
 					mines:nil
 					friendyFlag: {List.filter Input.flags fun {$ Elem} Elem.color == Color end}.1
 					enemyHasFlag: false
+					speedBoost:false
 					playersState:{InitOtherPlayers 1} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
@@ -115,8 +120,14 @@ in
 			[] dropFlag(?ID ?Flag) then {DropFlag State ID Flag}
 			[] sayFlagTaken(ID Flag) then {SayFlagTaken State ID Flag}
 			[] sayFlagDropped(ID Flag) then {SayFlagDropped State ID Flag}
+
+			%%%%% CUSTOM MESSAGES %%%%% 
 			[] respawn() then {Respawn State}
 			[] sayRespawn(ID) then {SayRespawn State ID}
+			[] saySpeedBoostTaken() then {SaySpeedBoostTaken State}
+			[] saySpeedBoostWoreOff() then {SaySpeedBoostWoreOff State}
+			[] sayAdrenalineTaken() then {SayAdrenalineTaken State}
+			[] sayAdrenalineWoreOff() then {SayAdrenalineWoreOff State}
 			
 			[] _ then % if no messages match, instead of crashing we just return the unmodified state
 				{System.show 'Player ID'#State.id#' got an unknown message, ignoring...'} 
@@ -162,7 +173,7 @@ in
 				% check if we will step into a mine
 				NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos NewPos} == 0 end}
 
-				if {ManhattanDistance State.position NewPos} =< 1
+				if {ManhattanDistance State.position NewPos} =< MaxTravelDistance
 					andthen (NewPosMapTileNbr \= 3) 
 						andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) 
 							andthen {List.length OtherPlayersAtPos} == 0 
@@ -177,12 +188,14 @@ in
 			end
 		end
 
-		Pos DX DY
+		Pos DX DY MaxTravelDistance
 	in
 		{SimulatedThinking}
 		ID = State.id
 
 		Pos = State.position
+
+		MaxTravelDistance = if State.speedBoost == true then 2 else 1 end
 
 		% make the defenders stay near the friendly flag, or near the friendly with the flag
 		if State.enemyHasFlag == false then
@@ -193,37 +206,35 @@ in
 			% make the player go to the friendly that is carrying the flag
 			FriendlyWithFlagPos
 		in
-			FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null end}.1.position
+			FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null andthen Elem.id \= State.id andthen Elem.hp > 0 end}.1.position
 
 			DX = FriendlyWithFlagPos.x - Pos.x
 			DY = FriendlyWithFlagPos.y - Pos.y	
 		end
 
-		if DX < 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x - 1}} then
+		if DX < 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x - MaxTravelDistance}} then
 
-			Position = {AdjoinAt Pos x Pos.x - 1}
+			Position = {AdjoinAt Pos x Pos.x - MaxTravelDistance}
 
-		elseif DX > 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x + 1}} then
+		elseif DX > 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x + MaxTravelDistance}} then
 
-			Position = {AdjoinAt Pos x Pos.x + 1}
+			Position = {AdjoinAt Pos x Pos.x + MaxTravelDistance}
 
-		elseif DY < 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y - 1}} then
+		elseif DY < 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y - MaxTravelDistance}} then
 
-			Position = {AdjoinAt Pos y Pos.y - 1}
+			Position = {AdjoinAt Pos y Pos.y - MaxTravelDistance}
 
-		elseif DY > 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y + 1}} then
+		elseif DY > 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y + MaxTravelDistance}} then
 
-			Position = {AdjoinAt Pos y Pos.y + 1}
+			Position = {AdjoinAt Pos y Pos.y + MaxTravelDistance}
 
 		else 
 			NearestMines SafeDirectionX SafeDirectionY
 		in
-			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == 1 end}
+			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == MaxTravelDistance end}
+
 
 			if {List.length NearestMines} > 0 then
-				% if one of these is 0, you want to get away from that axis
-				% e.g. player is on (3, 3), mine on (2, 3), and flag is on (1, 3): the player wants to go up, but SafeDirectionY will be 0
-				% since it's 0 we will just go left or right on the X axis (while remaining in the map)
 				SafeDirectionX = NearestMines.1.pos.x - Pos.x
 				SafeDirectionY = NearestMines.1.pos.y - Pos.y
 			else
@@ -237,28 +248,28 @@ in
 			case {OS.rand} mod 4
 			of 0 then
 				% avoid mines, we check SafeDirectionX since this random move was going to make the player move up in the X axis
-				if SafeDirectionX == 0 then
-					Position = {AdjoinAt Pos y if Pos.y + 1 == Input.nColumn then Pos.y - 1 else Pos.y + 1 end}
+				if SafeDirectionX \= 0 then
+					Position = {AdjoinAt Pos y if Pos.y + MaxTravelDistance == Input.nColumn then Pos.y - MaxTravelDistance else Pos.y + MaxTravelDistance end}
 				else
-					Position = {AdjoinAt Pos x Pos.x + 1}
+					Position = {AdjoinAt Pos x Pos.x + MaxTravelDistance}
 				end
 			[] 1 then
-				if SafeDirectionX == 0 then
-					Position = {AdjoinAt Pos y if Pos.y + 1 == Input.nColumn then Pos.y - 1 else Pos.y + 1 end}
+				if SafeDirectionX \= 0 then
+					Position = {AdjoinAt Pos y if Pos.y + MaxTravelDistance == Input.nColumn then Pos.y - MaxTravelDistance else Pos.y + MaxTravelDistance end}
 				else
-					Position = {AdjoinAt Pos x Pos.x - 1}
+					Position = {AdjoinAt Pos x Pos.x - MaxTravelDistance}
 				end
 			[] 2 then
-				if SafeDirectionY == 0 then
-					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRow then Pos.x - 1 else Pos.x + 1 end}
+				if SafeDirectionY \= 0 then
+					Position = {AdjoinAt Pos x if Pos.x + MaxTravelDistance == Input.nRow then Pos.x - MaxTravelDistance else Pos.x + MaxTravelDistance end}
 				else
-					Position = {AdjoinAt Pos y Pos.y + 1}
+					Position = {AdjoinAt Pos y Pos.y + MaxTravelDistance}
 				end
 			[] 3 then
-				if SafeDirectionY == 0 then
-					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRow then Pos.x - 1 else Pos.x + 1 end}
+				if SafeDirectionY \= 0 then
+					Position = {AdjoinAt Pos x if Pos.x + MaxTravelDistance == Input.nRow then Pos.x - MaxTravelDistance else Pos.x + MaxTravelDistance end}
 				else
-					Position = {AdjoinAt Pos y Pos.y - 1}
+					Position = {AdjoinAt Pos y Pos.y - MaxTravelDistance}
 				end
 			end
 			
@@ -333,10 +344,10 @@ in
 		{SimulatedThinking}
 
 		ID = State.id
-		if State.gunReloads < Input.gunCharge then
-			Kind = gun
-		elseif State.mineReloads < Input.mineCharge then
+		if State.mineReloads < Input.mineCharge then
 			Kind = mine
+		elseif State.gunReloads < Input.gunCharge then
+			Kind = gun
 		else
 			Kind = null
 		end
@@ -395,7 +406,7 @@ in
 			Kind = gun(pos:NearestPlayers.1.position)
 
 		% place mines around the flag
-		elseif State.mineReloads == Input.mineCharge andthen {OS.rand} mod 5 == 1 andthen {ManhattanDistance State.position State.friendyFlag.pos} =< 4 then % dont place mines too often
+		elseif State.mineReloads == Input.mineCharge andthen {OS.rand} mod 5 == 0 andthen State.friendyFlag \= null andthen {ManhattanDistance State.position State.friendyFlag.pos} =< 5 then % dont place mines too often
 			Kind = mine(pos: State.position)
 		else
 			Kind = null
@@ -519,12 +530,11 @@ in
 
 		% if an enemy is carrying the flag
 		if ID.color \= State.id.color then 
-
 			% remove the enemy flag from the list since the flag is currently being carried by another player and is therefore not at the original position anymore
 			FlagState = {AdjoinAt {AdjoinAt OutputState friendyFlag null} enemyHasFlag true}
 
 		else 
-			% if an enemy is carrying this player's flag
+			% if a friendly is carrying the flag
 			FlagState = OutputState 
 		end
 
@@ -579,6 +589,31 @@ in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
 		else
 			State
+		end
+	end
+
+	fun {SaySpeedBoostTaken State}
+		{AdjoinAt State speedBoost true}
+	end
+
+	fun {SaySpeedBoostWoreOff State}
+		{AdjoinAt State speedBoost false}
+	end
+
+	fun {SayAdrenalineTaken State} 
+		% wrap in try catch to make it work with other groups that might have not defined adrenalineBoostHP (since it's an extension)
+		try
+			{AdjoinAt State hp State.hp+Input.adrenalineBoostHP}
+		catch _ then
+			{AdjoinAt State hp State.hp+2}
+		end
+	end
+
+	fun {SayAdrenalineWoreOff State} 
+		try
+			{AdjoinAt State hp State.hp-Input.adrenalineBoostHP}
+		catch _ then
+			{AdjoinAt State hp State.hp-2}
 		end
 	end
 end

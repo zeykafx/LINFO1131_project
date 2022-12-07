@@ -38,6 +38,12 @@ define
 	UpdateLife
 	SoldierHasFlag
 	RemoveSoldierHasFlag
+
+	DrawSpeedBoost
+	RemoveSpeed
+
+	DrawAdrenalineBoost
+	RemoveAdrenaline
 in
 
 %%%%% Build the initial window and set it up (call only once)
@@ -113,7 +119,7 @@ in
 		Handle HandleScore X Y Id Color LabelSub LabelScore
 	in
 		if ID == null then
-			guiSoldier(id:ID score:null soldier:null mines:nil flags:nil foods:nil)
+			guiSoldier(id:ID score:null soldier:null mines:nil flags:nil foods:nil speeds:nil adrenalines:nil)
 		else
 			pt(x:X y:Y) = Position
 			id(id:Id color:Color name:_) = ID
@@ -123,20 +129,20 @@ in
 			{Grid.grid configure(LabelSub row:X+1 column:Y+1 sticky:wesn)}
 			{Grid.score configure(LabelScore row:1 column:Id sticky:wesn)}
 			{Handle 'raise'()}
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:nil flags:nil foods:nil)
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:nil flags:nil foods:nil speeds:nil adrenalines:nil)
 		end
 	end
 
 	fun{MoveSoldier Position}
 		fun{$ Grid State}
-			ID HandleScore Handle Mine X Y Flag Food
+			ID HandleScore Handle Mine X Y Flag Food Speed Adrenaline
 		in
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food) = State
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
 			pt(x:X y:Y) = Position
 			{Grid.grid remove(Handle)}
 			{Grid.grid configure(Handle row:X+1 column:Y+1 sticky:wesn)}
 			{Handle 'raise'()}
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food)
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline)
 		end
 	end
 
@@ -145,7 +151,7 @@ in
 		fun{$ Grid State}
 			ID Handle
 		in
-			guiSoldier(id:ID score:_ soldier:Handle mines:_ flags:_ foods:_) = State
+			guiSoldier(id:ID score:_ soldier:Handle mines:_ flags:_ foods:_ speeds:_ adrenalines:_) = State
 			{Handle set(text:'S'#ID.id#'F')}
 			State
 		end
@@ -156,7 +162,7 @@ in
 		fun{$ Grid State}
 			ID Handle
 		in
-			guiSoldier(id:ID score:_ soldier:Handle mines:_ flags:_ foods:_) = State
+			guiSoldier(id:ID score:_ soldier:Handle mines:_ flags:_ foods:_ speeds:_ adrenalines:_) = State
 			{Handle set(text:'S'#ID.id)}
 			State
 		end
@@ -164,9 +170,9 @@ in
   
 	fun{DrawMine Position}
 		fun{$ Grid State}
-			ID HandleScore Handle Mine LabelMine HandleMine X Y Flag Food
+			ID HandleScore Handle Mine LabelMine HandleMine X Y Flag Food Speed Adrenaline
 		in
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food) = State
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
 			pt(x:X y:Y) = Position
 			LabelMine = label(text:"M" handle:HandleMine borderwidth:5 relief:raised bg:c(30 30 30) ipadx:5 ipady:5)
 			{Grid.grid configure(LabelMine row:X+1 column:Y+1)}
@@ -174,16 +180,16 @@ in
 			if Handle \= null then 
 				{Handle 'raise'()}
 			end
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:mine(HandleMine Position)|Mine flags:Flag foods:Food)
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:mine(HandleMine Position)|Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline)
 		end
 	end
 
 	fun{DrawFlag Position Color}
 		fun{$ Grid State}
-			ID HandleScore Handle Flag LabelFlag HandleFlag X Y Flag Mine Food
+			ID HandleScore Handle Flag LabelFlag HandleFlag X Y Flag Mine Food Speed Adrenaline
 		in
 			{System.show drawFlag|Color}
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food) = State
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
 			pt(x:X y:Y) = Position
 			LabelFlag = label(text:"F" handle:HandleFlag borderwidth:5 relief:raised bg:Color ipadx:5 ipady:5)
 			{Grid.grid configure(LabelFlag row:X+1 column:Y+1)}
@@ -191,15 +197,15 @@ in
 			if Handle \= null then 
 				{Handle 'raise'()}
 			end
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:flag(HandleFlag Position)|Flag foods:Food)
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:flag(HandleFlag Position)|Flag foods:Food speeds:Speed adrenalines:Adrenaline)
 		end
 	end
 
 	fun{DrawFood Position}
 		fun{$ Grid State}
-			ID HandleScore Handle Flag LabelFood HandleFood X Y Flag Mine Food
+			ID HandleScore Handle Flag LabelFood HandleFood X Y Flag Mine Food Speed Adrenaline
 		in
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food) = State
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
 			pt(x:X y:Y) = Position
 			LabelFood = label(text:"f" handle:HandleFood borderwidth:5 relief:raised bg:c(160 160 160) ipadx:5 ipady:5)
 			{Grid.grid configure(LabelFood row:X+1 column:Y+1)}
@@ -207,7 +213,41 @@ in
 			if Handle \= null then 
 				{Handle 'raise'()}
 			end
-			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:food(HandleFood Position)|Food)
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:food(HandleFood Position)|Food speeds:Speed adrenalines:Adrenaline)
+		end
+	end
+
+	fun{DrawSpeedBoost Position}
+		fun{$ Grid State}
+			ID HandleScore Handle Flag LabelSpeed HandleSpeed X Y Flag Mine Food Speed Adrenaline
+		in
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
+
+			pt(x:X y:Y) = Position
+			LabelSpeed = label(text:"spd" handle:HandleSpeed borderwidth:5 relief:raised bg:c(31 161 206) ipadx:5 ipady:5)
+			{Grid.grid configure(LabelSpeed row:X+1 column:Y+1)}
+			{HandleSpeed 'raise'()}
+
+			if Handle \= null then 
+				{Handle 'raise'()}
+			end
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:speed(HandleSpeed Position)|Speed adrenalines:Adrenaline)
+		end
+	end
+
+	fun{DrawAdrenalineBoost Position}
+		fun{$ Grid State}
+			ID HandleScore Handle Flag LabelAdrenaline HandleAdrenaline X Y Flag Mine Food Speed Adrenaline
+		in
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
+			pt(x:X y:Y) = Position
+			LabelAdrenaline = label(text:"adr" handle:HandleAdrenaline borderwidth:5 relief:raised bg:c(194 206 31) ipadx:5 ipady:5)
+			{Grid.grid configure(LabelAdrenaline row:X+1 column:Y+1)}
+			{HandleAdrenaline 'raise'()}
+			if Handle \= null then 
+				{Handle 'raise'()}
+			end
+			guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:adrenaline(HandleAdrenaline Position)|Adrenaline)
 		end
 	end
 
@@ -228,11 +268,11 @@ in
 		fun{RemoveMine Position}
 			{System.show removeMine(Position)}
 			fun{$ Grid State}
-				ID HandleScore Handle Mine NewMine Flag Food
+				ID HandleScore Handle Mine NewMine Flag Food Speed Adrenaline
 			in
-				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food) = State
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
 				NewMine = {RmMine Grid Position Mine}
-				guiSoldier(id:ID score:HandleScore soldier:Handle mines:NewMine flags:Flag foods:Food)
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:NewMine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline)
 			end
 		end
 	end
@@ -254,14 +294,67 @@ in
 		fun{RemoveFood Position}
 			{System.show removeFood(Position)}
 			fun{$ Grid State}
-				ID HandleScore Handle Food NewFood Mine Flag
+				ID HandleScore Handle Food NewFood Mine Flag Speed Adrenaline
 			in
-				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food) = State
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
 				NewFood = {RmFood Grid Position Food}
-				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:NewFood)
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:NewFood speeds:Speed adrenalines:Adrenaline)
 			end
 		end
 	end
+
+	local
+		fun{RmSpeed Grid Position List}
+			case List
+			of nil then nil
+			[] H|T then
+				if (H.2 == Position) then
+					{RemoveItem Grid H.1}
+					T
+				else
+					H|{RmSpeed Grid Position T}
+				end
+			end
+		end
+	in
+		fun{RemoveSpeed Position}
+			{System.show removeSpeed(Position)}
+			fun{$ Grid State}
+				ID HandleScore Handle Food NewSpeed Mine Flag Speed Adrenaline
+			in
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
+				NewSpeed = {RmSpeed Grid Position Speed}
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:NewSpeed adrenalines:Adrenaline)
+			end
+		end
+	end
+
+	local
+		fun{RmAdrenaline Grid Position List}
+			case List
+			of nil then nil
+			[] H|T then
+				if (H.2 == Position) then
+					{RemoveItem Grid H.1}
+					T
+				else
+					H|{RmAdrenaline Grid Position T}
+				end
+			end
+		end
+	in
+		fun{RemoveAdrenaline Position}
+			{System.show removeAdrenaline(Position)}
+			fun{$ Grid State}
+				ID HandleScore Handle Food NewAdrenaline Speed Mine Flag Speed Adrenaline
+			in
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
+				NewAdrenaline = {RmAdrenaline Grid Position Adrenaline}
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:NewAdrenaline)
+			end
+		end
+	end
+
 
 	local
 		fun{RmFlag Grid Position List}
@@ -280,11 +373,11 @@ in
 		fun{RemoveFlag Position}
 			{System.show removeFlag(Position)}
 			fun{$ Grid State}
-				ID HandleScore Handle Mine NewFlag Flag Food
+				ID HandleScore Handle Mine NewFlag Flag Food Speed Adrenaline
 			in
-				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food) = State
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline) = State
 				NewFlag = {RmFlag Grid Position Flag}
-				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:NewFlag foods:Food)
+				guiSoldier(id:ID score:HandleScore soldier:Handle mines:Mine flags:NewFlag foods:Food speeds:Speed adrenalines:Adrenaline)
 			end
 		end
 	end
@@ -297,7 +390,7 @@ in
 		fun{$ Grid State}
 			HandleScore
 		in
-			guiSoldier(id:_ score:HandleScore soldier:_ mines:_ flags:_ foods:_) = State
+			guiSoldier(id:_ score:HandleScore soldier:_ mines:_ flags:_ foods:_ speeds:_ adrenalines:_) = State
 			{HandleScore set(text:Life)}
 	 		State
 		end
@@ -307,7 +400,7 @@ in
 	fun{StateModification Grid WantedID State Fun}
 		case State
 		of nil then nil
-		[] guiSoldier(id:ID score:_ soldier:_ mines:_ flags:_ foods:_)|Next then
+		[] guiSoldier(id:ID score:_ soldier:_ mines:_ flags:_ foods:_ speeds:_ adrenalines:_)|Next then
 			if (ID \= null) andthen (WantedID \= null) andthen {HasFeature ID id} andthen {HasFeature WantedID id} then
 				if (ID.id == WantedID.id) then
 					{Fun Grid State.1}|Next
@@ -325,7 +418,7 @@ in
 	fun {RemoveSoldier Grid WantedID State}
 		case State
 		of nil then nil
-		[] guiSoldier(id:ID score:HandleScore soldier:Handle mines:M flags:Flag foods:Food)|Next then
+		[] guiSoldier(id:ID score:HandleScore soldier:Handle mines:M flags:Flag foods:Food speeds:Speed adrenalines:Adrenaline)|Next then
 			if (ID == WantedID) then
 				{RemoveItem Grid Handle}
 				Next
@@ -381,6 +474,20 @@ in
 			{TreatStream T Grid {StateModification Grid ID State {SoldierHasFlag}}}
 		[] removeSoldierHasFlag(ID)|T then
 			{TreatStream T Grid {StateModification Grid ID State {RemoveSoldierHasFlag}}}
+
+		[] putSpeed(Speed)|T then 
+			{TreatStream T Grid {StateModification Grid null State {DrawSpeedBoost Speed.pos}}}
+
+		[] removeSpeed(Speed)|T then
+			{TreatStream T Grid {StateModification Grid null State {RemoveSpeed Speed.pos}}}
+
+		[] putAdrenaline(Adrenaline)|T then 
+			{TreatStream T Grid {StateModification Grid null State {DrawAdrenalineBoost Adrenaline.pos}}}
+
+		[] removeAdrenaline(Adrenaline)|T then
+			{TreatStream T Grid {StateModification Grid null State {RemoveAdrenaline Adrenaline.pos}}}
+
+
 		[] _|T then
 			{TreatStream T Grid State}
 		end

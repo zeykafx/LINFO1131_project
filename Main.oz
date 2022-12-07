@@ -57,6 +57,7 @@ in
 					mineReload:0 
 					gunReload:0 
 					flag:null
+					speedBoost:false
 				)|{InitPlayersState Nbr+1}
 		end
 	end
@@ -72,8 +73,12 @@ in
 				state(
 					mines:nil
 					flags:Input.flags 
-					foodTimerRunning: false
+					foodTimerRunning:false
+					speedTimerRunning:false
+					adrenalineTimerRunning:false
 					food:nil
+					speed:nil
+					adrenaline:nil
 					playersState:{InitPlayersState 1}
 				)
 			}
@@ -82,7 +87,7 @@ in
 	end
 
 
-	% State is like state(mines:[mines] flags:[flags] shouldSpawnFood:boolean food:[food] playerState(id:id(id:Nbr color:Color) position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag))
+	% State is like state(mines:[mines] flags:[flags] shouldSpawnFood:boolean food:[food] speed:[speed] adrenaline:[adrenaline] playerState(id:id(id:Nbr color:Color) position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost))
 
 
 	proc{TreatGameControllerStream Stream State}
@@ -114,16 +119,17 @@ in
 		fun {MovePlayer State ID Position ?Status}
 			% modifies the position inside the playersState list
 			fun {ModPos PlayerState}
-				playerState(id:LocalID position:_ hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+				playerState(id:LocalID position:_ hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 
 			in
-				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
+				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
 			end
-			NewState NewPosMapTileNbr CurrentPlayerState EnemyBaseTileNbr OtherPlayersAtPos
+			NewState NewPosMapTileNbr CurrentPlayerState EnemyBaseTileNbr OtherPlayersAtPos MaxTravelDistance
 		in
-					
 			% get the player n°ID's state
 			CurrentPlayerState = {List.nth State.playersState ID.id}
+
+			MaxTravelDistance = if CurrentPlayerState.speedBoost == true then 2 else 1 end
 
 			% if the new position is in the map
 			if (Position.x =< Input.nRow) andthen (Position.y =< Input.nColumn) andthen (Position.x > 0) andthen (Position.y > 0) then
@@ -141,9 +147,9 @@ in
 				% check if there are other players at the position that the player wants to go to, if there is, we refuse the move
 				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == Position andthen Elem.id \= CurrentPlayerState.id andthen Elem.hp > 0 end}
 
-				% check that the player isn't moving more than one tile in both directions, and that he isn't moving onto a wall or in the enemy base
+				% check that the player isn't moving more than MaxTravelDistance tile in both directions, and that he isn't moving onto a wall or in the enemy base
 				% {Abs (CurrentPlayerState.position.x - Position.x)} =< 1 andthen {Abs (CurrentPlayerState.position.y - Position.y)} =< 1
-				if {ManhattanDistance CurrentPlayerState.position Position} =< 1 andthen (NewPosMapTileNbr \= 3) andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) andthen {List.length OtherPlayersAtPos} == 0 then
+				if {ManhattanDistance CurrentPlayerState.position Position} =< MaxTravelDistance andthen (NewPosMapTileNbr \= 3) andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) andthen {List.length OtherPlayersAtPos} == 0 then
 
 					% if the move is valid, move the player and bind Status to true
 					NewState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID ModPos}}
@@ -165,9 +171,9 @@ in
 		%%% handles killPlayer(ID) messages
 		fun {KillPlayer State ID}
 			fun {ModDeath PlayerState}
-				playerState(id:ID position:Position hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+				playerState(id:ID position:Position hp:_ mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 			in
-				playerState(id:ID position:Position hp:0 mineReload:MineReload gunReload:GunReload flag:Flag)
+				playerState(id:ID position:Position hp:0 mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
 			end 
 		in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModDeath}}
@@ -176,11 +182,11 @@ in
 		%%% handles respawnPlayer(ID) messages
 		fun {RespawnPlayer State ID}
 			fun {ModHp PlayerState}
-				playerState(id:LocalID position:_ hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+				playerState(id:LocalID position:_ hp:_ mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 				NewPos
 			in
 				NewPos = {List.nth Input.spawnPoints LocalID.id}
-				playerState(id:LocalID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
+				playerState(id:LocalID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
 			end 
 		in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
@@ -189,9 +195,9 @@ in
 		%%% handles sayDamageTaken(ID Damage LifeLeft) messages
 		fun {SayDamageTaken State ID Damage LifeLeft}
 			fun {ModHp PlayerState}
-				playerState(id:LocalID position:Position hp:_ mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+				playerState(id:LocalID position:Position hp:_ mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 			in
-				playerState(id:LocalID position:Position hp:LifeLeft mineReload:MineReload gunReload:GunReload flag:Flag)
+				playerState(id:LocalID position:Position hp:LifeLeft mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
 			end 
 		in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
@@ -202,7 +208,7 @@ in
 			of nil then 
 				nil  % no player has the flag
 
-			[] playerState(id:PlayerID position:PlayerPosition hp:_ mineReload:_ gunReload:_ flag:PlayerFlag)|NextPlayer then
+			[] playerState(id:PlayerID position:PlayerPosition hp:_ mineReload:_ gunReload:_ flag:PlayerFlag speedBoost:_)|NextPlayer then
 				% check the flag
 				case PlayerFlag 
 				of null then 
@@ -219,9 +225,9 @@ in
 		fun {CheckCanGrabFlag State ID Flag ?Status}
 
 			fun {ModFlag PlayerState}
-				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:_) = PlayerState
+				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:_ speedBoost:SpeedBoost) = PlayerState
 			in
-				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag)
+				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
 			end 
 
 			CurrentPlayerState OutputState
@@ -262,10 +268,10 @@ in
 		%%% handles dropFlag(ID Flag ?Status) messages
 		fun {DropFlag State ID Flag ?Status}
 			fun {ModFlag PlayerState}
-				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:_) = PlayerState
+				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:_ speedBoost:SpeedBoost) = PlayerState
 			in
 				Status = true
-				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:null)
+				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:null speedBoost:SpeedBoost)
 			end
 		in
 			{AdjoinAt {AdjoinAt State flags Flag|State.flags} playersState {PlayerStateModification State.playersState ID ModFlag}}
@@ -315,8 +321,8 @@ in
 					of X then
 						case ({OS.rand} mod 12) +1
 						of Y then
-							if {GetMapPos X Y} == 0 then
-								% if the random tile is not a wall or a base, then we can spawn food there
+							if {GetMapPos X Y} == 0 andthen {List.all State.speed fun {$ Elem} {GetMapPos X Y} \= Elem.pos end} andthen {List.all State.food fun {$ Elem} {GetMapPos X Y} \= Elem.pos end} andthen {List.all State.adrenaline fun {$ Elem} {GetMapPos X Y} \= Elem.pos end} then
+								% if the random tile is not a wall or a base, and doesn't have speed/food/adrenaline on it, then we can spawn food there
 									pt(x:X y:Y)
 							else
 								% if the position was a wall or a base, try again until we get a correct position
@@ -346,11 +352,11 @@ in
 			local
 				OutputState NewPlayersState
 				fun {ModHp PlayerState}
-					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 				in
 					{Send WindowPort lifeUpdate(ID HP+1)}
 					% Not sure if we need to limit the HP to startHealt or not. use this if yes -> {Max HP+1 Input.startHealth}
-					playerState(id:ID position:Position hp:HP+1 mineReload:MineReload gunReload:GunReload flag:Flag)
+					playerState(id:ID position:Position hp:HP+1 mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
 				end 
 			in
 				% check to see if the food is a valid food item, and to see if the player's position is the same as the food item's, then they can consume it
@@ -373,6 +379,147 @@ in
 				OutputState
 			end
 		end
+
+		%%% SPEED and ADRENALINE
+
+		%%% handles startSpeedTimer(?TimerStatus) and startAdrenalineTimer(?TimerStatus) messages
+		fun {StartBoostTimer State SpeedOrAdrenaline ?TimerStatus}
+			Timer DelayMax DelayMin Message OutputState
+		in
+			if SpeedOrAdrenaline == speed then
+				Timer = speedTimerRunning
+				DelayMax = Input.speedBoostDelayMax
+				DelayMin = Input.speedBoostDelayMin
+				Message = spawnSpeed()
+			else
+				Timer = adrenalineTimerRunning
+				DelayMax = Input.adrenalineDelayMax
+				DelayMin = Input.adrenalineDelayMin
+				Message = spawnAdrenaline()
+			end
+
+			% start the timer only if no other timer were already started
+			if State.Timer == false then
+				OutputState = {AdjoinAt State Timer true}
+				TimerStatus = true
+				thread 
+					% after a random delay, send a message to the game controller to spawn the boost on a random tile
+					{Delay ({OS.rand} mod (DelayMax - DelayMin) + DelayMin)}
+					{Send GameControllerPort Message}
+				end
+			else
+				OutputState = State
+				TimerStatus = false
+			end
+			OutputState
+		end
+
+		%%% handles spawnSpeed() and spawnAdrenaline() messages
+		fun {SpawnBoost SpeedOrAdrenaline State}
+			local
+				fun {RandomPosOnMap}
+					case ({OS.rand} mod 12) +1 % +1 because there is no pos 0 on the map
+					of X then
+						case ({OS.rand} mod 12) +1
+						of Y then
+							if {GetMapPos X Y} == 0 andthen {List.all State.speed fun {$ Elem} {GetMapPos X Y} \= Elem.pos end} andthen {List.all State.food fun {$ Elem} {GetMapPos X Y} \= Elem.pos end} andthen {List.all State.adrenaline fun {$ Elem} {GetMapPos X Y} \= Elem.pos end} then
+									pt(x:X y:Y)
+							else
+								{RandomPosOnMap}
+							end
+						end
+					end
+				end
+				OutputState RandomPos
+			in
+				RandomPos = {RandomPosOnMap}
+				if SpeedOrAdrenaline == speed then
+					OutputState = {AdjoinAt {AdjoinAt State speed speed(pos: RandomPos)|State.speed} speedTimerRunning false}
+					{Send WindowPort putSpeed(speed(pos: RandomPos))}
+				else
+					OutputState = {AdjoinAt {AdjoinAt State adrenaline adrenaline(pos: RandomPos)|State.adrenaline} adrenalineTimerRunning false}
+					{Send WindowPort putAdrenaline(adrenaline(pos: RandomPos))}
+				end
+				OutputState
+			end
+		end
+
+		%%% handles canEatSpeed(ID Speed ?Status) and canEatAdrenaline(ID Adrenaline ?Status) messages
+		fun {CanEatBoost State ID Item SpeedOrAdrenaline ?Status}
+			local
+				fun {ModSpeed PlayerState}
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:_) = PlayerState
+				in
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:true)
+				end 
+
+				fun {ModAdrenaline PlayerState}
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
+					NewHp
+				in
+					NewHp = HP+Input.adrenalineBoostHP
+					{Send WindowPort lifeUpdate(ID NewHp)}
+					{SendToAll sayDamageTaken(ID ~2 NewHp)} % remove -2 dmg to give 2 hp to the player
+					playerState(id:ID position:Position hp:NewHp mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
+				end 
+
+				OutputState NewPlayersState
+			in
+
+				if {List.member Item State.SpeedOrAdrenaline} andthen Item.pos == {List.nth State.playersState ID.id}.position then
+					if SpeedOrAdrenaline == speed then
+						{Send WindowPort removeSpeed(Item)}
+						NewPlayersState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID ModSpeed}}
+
+					else
+						{Send WindowPort removeAdrenaline(Item)}
+						NewPlayersState = {AdjoinAt State playersState {PlayerStateModification State.playersState ID ModAdrenaline}}
+					end
+
+					OutputState = {AdjoinAt NewPlayersState SpeedOrAdrenaline {List.filter State.SpeedOrAdrenaline fun {$ Elem} Elem \= Item end}}
+					Status = true
+
+					thread 
+						Message = if SpeedOrAdrenaline == speed then removeSpeedBoost(ID) else removeAdrenalineBoost(ID) end
+						Message2 = if SpeedOrAdrenaline == speed then saySpeedBoostWoreOff() else sayAdrenalineWoreOff() end
+					in
+						{Delay Input.boostsDuration}
+						{Send GameControllerPort Message}
+						{Send {List.nth PlayersPorts ID.id}.2 Message2}
+					end
+
+				else
+					OutputState = State
+					Status = false
+				end
+				OutputState
+			end
+		end
+
+		%%% handles removeSpeedBoost(ID) and removeAdrenalineBoost(ID) messages
+		fun {RemoveBoost State ID SpeedOrAdrenaline}
+			local
+				fun {ModSpeed PlayerState}
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:_) = PlayerState
+				in
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:false)
+				end 
+
+				fun {ModAdrenaline PlayerState}
+					playerState(id:ID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
+					NewHp
+				in
+					NewHp = (HP-Input.adrenalineBoostHP)
+					{Send WindowPort lifeUpdate(ID NewHp)}
+					{SendToAll sayDamageTaken(ID Input.adrenalineBoostHP NewHp)} 
+					playerState(id:ID position:Position hp:NewHp mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
+				end 
+			in
+
+				{AdjoinAt State playersState {PlayerStateModification State.playersState ID if SpeedOrAdrenaline == speed then ModSpeed else ModAdrenaline end}}
+			end
+		end
+	
 
 		%%% MINES
 		
@@ -418,7 +565,7 @@ in
 
 		% function that applies the damage to the player
 		fun {ApplyDmg PlayerState HpToRemove}
-			playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+			playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 			NewHp
 		in
 			NewHp = {Max HP-HpToRemove 0}
@@ -432,7 +579,7 @@ in
 				{SendToAll sayDeath(LocalID)}
 			end
 
-			playerState(id:LocalID position:Position hp:NewHp mineReload:MineReload gunReload:GunReload flag:Flag)
+			playerState(id:LocalID position:Position hp:NewHp mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
 		end 
 
 		% apply damage to all players based on the range from the mine
@@ -441,7 +588,7 @@ in
 		in
 			case PlayersState
 			of nil then nil
-			[] playerState(id:ID position:Position hp:HP mineReload:_ gunReload:_ flag:_)|T then
+			[] playerState(id:ID position:Position hp:HP mineReload:_ gunReload:_ flag:_ speedBoost:_)|T then
 						
 				% get the manhattan distance from the mine
 				DistanceFromMine = {ManhattanDistance MinePos Position}
@@ -467,7 +614,7 @@ in
 			NewState MinesNearby
 		in
 
-			NewState = {AdjoinAt State mines {RemoveMine State.mines Mine}}
+			NewState = {AdjoinAt State mines {List.filter State.mines fun {$ Elem} Elem \= Mine end}}
 
 			{SendToAll sayMineExplode(Mine)}
 			{Send WindowPort removeMine(Mine)}
@@ -478,6 +625,8 @@ in
 			if {List.length MinesNearby} >= 1 then
 				for I in MinesNearby do
 					thread 
+						{Wait Status}
+
 						{Delay 500} % small delay to make the explosions look like a chain reaction
 						% send a message to the gamecontroller in another thread to ask to make the mines nearby explode
 						{Send GameControllerPort mineExploded(I _)}
@@ -496,7 +645,7 @@ in
 		%%% handles chargeItem(ID Item ?Status) messages
 		fun {ChargeItem State ID Item ?Status}
 			fun {ModCharge PlayerState}
-				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 				NewGunReload NewMineReload
 			in
 				if Item == gun then
@@ -510,7 +659,7 @@ in
 				Status = true
 
 				% update the mine/gun reload
-				playerState(id:LocalID position:Position hp:HP mineReload:NewMineReload gunReload:NewGunReload flag:Flag)
+				playerState(id:LocalID position:Position hp:HP mineReload:NewMineReload gunReload:NewGunReload flag:Flag speedBoost:SpeedBoost)
 			end 
 		in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModCharge}}
@@ -520,7 +669,7 @@ in
 		fun {ShootPlayerAtPos PlayersState WantedPosition Function}
 			case PlayersState
 			of nil then nil
-			[] playerState(id:ID position:PlayerPosition hp:HP mineReload:_ gunReload:_ flag:_)|T then
+			[] playerState(id:ID position:PlayerPosition hp:HP mineReload:_ gunReload:_ flag:_ speedBoost:_)|T then
 				% shoot player at WantedPosition, if they are alive
 				if (PlayerPosition == WantedPosition) andthen HP > 0 then
 					{Function PlayersState.1}|T
@@ -539,7 +688,7 @@ in
 				OutputState NewStateMineExplosion
 
 				fun {ModHp PlayerState}
-					playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+					playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 					NewHP
 				in
 					NewHP = {Max HP-1 0}
@@ -553,11 +702,11 @@ in
 						{SendToAll sayDeath(LocalID)}
 					end
 
-					playerState(id:LocalID position:Position hp:NewHP mineReload:MineReload gunReload:GunReload flag:Flag)
+					playerState(id:LocalID position:Position hp:NewHP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost)
 				end 
 
 				fun {ModCharge PlayerState}
-					playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) = PlayerState
+					playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:Flag speedBoost:SpeedBoost) = PlayerState
 					NewGunCharge NewMineCharge
 				in
 					if {Record.label FiredItem} == gun then
@@ -570,7 +719,7 @@ in
 						NewGunCharge = GunReload
 						NewMineCharge = MineReload
 					end
-					playerState(id:LocalID position:Position hp:HP mineReload:NewMineCharge gunReload:NewGunCharge flag:Flag)
+					playerState(id:LocalID position:Position hp:HP mineReload:NewMineCharge gunReload:NewGunCharge flag:Flag speedBoost:SpeedBoost)
 				end 
 			in
 				CurrentPlayerState = {List.nth State.playersState ID.id}
@@ -588,17 +737,37 @@ in
 						HasMineExploded = {CheckMineAtPosHelper State.mines FiredItem.pos 1}
 
 						if HasMineExploded \= false then
-							DmgState
+							DmgState MinesNearby
 						in
 							mineExploded(MinePosition Index) = HasMineExploded
 							{System.show 'Mine exploded when getting shot at, '#MinePosition}
 
+							% remove the mine that exploded 
+							DmgState = {AdjoinAt State mines {List.filter State.mines fun {$ Elem} Elem \= {List.nth State.mines Index} end}}
+
 							{SendToAll sayMineExplode(FiredItem)}
 							{Send WindowPort removeMine(FiredItem)}
 
-							% first apply the damage to the players, and then remove the mine that exploded on the new state returned by ApplyDmgIfInRange
-							DmgState = {AdjoinAt State playersState {ApplyDmgIfInRange State.playersState MinePosition}}
-							NewStateMineExplosion = {AdjoinAt DmgState mines {RemoveMine DmgState.mines FiredItem}}
+							% check for other mines in the vicinity (chain reaction)
+							MinesNearby = {List.filter DmgState.mines fun {$ Elem} {ManhattanDistance MinePosition Elem.pos} == 1 end}
+
+							if {List.length MinesNearby} >= 1 then
+								for I in MinesNearby do
+									thread 
+										% we wait for status to get bound here, so that we're sure that the state that we just changed above will be the state that all new messages get, including the message(s) that we're sending now
+										{Wait Status}
+										{Delay 500} % small delay to make the explosions look like a chain reaction
+										% send a message to the gamecontroller in another thread to ask to make the mines nearby explode
+										{Send GameControllerPort mineExploded(I _)}
+									end
+								end
+							
+							end
+		
+
+							% first apply the damage to the players, and then
+							NewStateMineExplosion = {AdjoinAt DmgState playersState {ApplyDmgIfInRange DmgState.playersState MinePosition}}
+							% NewStateMineExplosion = {AdjoinAt DmgState mines {RemoveMine DmgState.mines FiredItem}}
 							
 						else
 							NewStateMineExplosion = State
@@ -713,6 +882,30 @@ in
 
 			[] canEatFood(ID Food ?Status) then
 				{CanEatFood State ID Food Status}
+
+			[] startSpeedTimer(?TimerStatus) then
+				{StartBoostTimer State speed TimerStatus}
+
+			[] startAdrenalineTimer(?TimerStatus) then
+				{StartBoostTimer State adrenaline TimerStatus}
+
+			[] spawnSpeed() then
+				{SpawnBoost speed State}
+
+			[] spawnAdrenaline() then
+				{SpawnBoost adrenaline State}
+
+			[] canEatSpeed(ID Speed ?Status) then
+				{CanEatBoost State ID Speed speed Status}
+
+			[] canEatAdrenaline(ID Adrenaline ?Status) then
+				{CanEatBoost State ID Adrenaline adrenaline Status}
+
+			[] removeSpeedBoost(ID) then
+				{RemoveBoost State ID speed}
+
+			[] removeAdrenalineBoost(ID) then
+				{RemoveBoost State ID adrenaline}
 		end
 	end
 
@@ -720,7 +913,7 @@ in
 	fun {PlayerStateModification PlayersState WantedID Function}
 		case PlayersState
 		of nil then nil
-		[] playerState(id:ID position:_ hp:_ mineReload:_ gunReload:_ flag:_)|T then
+		[] playerState(id:ID position:_ hp:_ mineReload:_ gunReload:_ flag:_ speedBoost:_)|T then
 			if (ID.id == WantedID.id) then
 				{Function PlayersState.1}|T
 			else 
@@ -824,7 +1017,7 @@ in
 		[] step234 then
 			local	
 				% list of variables used in step 2, 3, and 4
-				NewPos PlayerID  HasMineExploded HasPlayerDied MoveStatus FoodStatus
+				NewPos PlayerID  HasMineExploded HasPlayerDied MoveStatus
 			in
 				%%%%%% STEP 2: if the player is alive ask where it wants to go
 				{PrintSteps 'step 2'#ID}
@@ -870,12 +1063,31 @@ in
 					end
 
 
-					% check to see if the player can eat food at the new position, if they can, the food is removed and they gain 1 HP
-					{Send GameControllerPort canEatFood(ID food(pos: NewPos) FoodStatus)}
-					{Wait FoodStatus}
-					if FoodStatus then
-						{System.show 'Player ID'#ID#' ate food and gained 1 hp'}
+					local FoodStatus SpeedStatus AdrenalineStatus in
+						% check to see if the player can eat food at the new position, if they can, the food is removed and they gain 1 HP
+						{Send GameControllerPort canEatFood(ID food(pos: NewPos) FoodStatus)}
+						{Wait FoodStatus}
+						if FoodStatus then
+							{SendToAll sayFoodEaten(ID food(pos: NewPos))}
+							{System.show 'Player ID'#ID#' ate food and gained 1 hp'}
+						end
+
+						{Send GameControllerPort canEatSpeed(ID speed(pos: NewPos) SpeedStatus)}
+						{Wait SpeedStatus}
+						if SpeedStatus then
+							{Send PlayerPort saySpeedBoostTaken()} % the game controller takes care of sending the delayed message that removes the boost
+							{System.show 'Player ID'#ID#' go the speed boost and gained 1 tile movement speed for 5 seconds'}
+						end
+
+						{Send GameControllerPort canEatAdrenaline(ID adrenaline(pos: NewPos) AdrenalineStatus)}
+						{Wait AdrenalineStatus}
+						if AdrenalineStatus then
+							{Send PlayerPort sayAdrenalineTaken()} % the game controller takes care of sending the delayed message that removes the boost
+							{System.show 'Player ID'#ID#' go the adrenaline boost and gained 2 hp for 5 seconds'}
+						end
 					end
+
+					
 				end
 
 				local
@@ -1058,8 +1270,33 @@ in
 				Status
 			in
 				{Send GameControllerPort startFoodTimer(Status)}
+				{Wait Status}
+
 				if Status then
 					{System.show 'Timer for food spawn started'}
+				end
+			end
+
+			% Extension: speed boost (gives +1 tile movement for 5 seconds) and adrenaline boost (gives +2 hp for 5 seconds)
+
+			local
+				SpeedStatus
+			in
+				{Send GameControllerPort startSpeedTimer(SpeedStatus)}
+				{Wait SpeedStatus}
+				if SpeedStatus then
+					{System.show 'Timer for speed spawn started'}
+				end
+			end
+
+			local
+				AdrenalineStatus
+			in
+				{Send GameControllerPort startAdrenalineTimer(AdrenalineStatus)}
+				{Wait AdrenalineStatus}
+
+				if AdrenalineStatus then
+					{System.show 'Timer for adrenaline spawn started'}
 				end
 			end
 

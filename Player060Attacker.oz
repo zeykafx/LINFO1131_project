@@ -37,6 +37,10 @@ define
 	InitOtherPlayers
 	Respawn
 	SayRespawn
+	SaySpeedBoostTaken
+	SaySpeedBoostWoreOff
+	SayAdrenalineTaken 
+	SayAdrenalineWoreOff
 
 	% Helper functions
 	RandomInRange = fun {$ Min Max} Min+({OS.rand}mod(Max-Min+1)) end
@@ -83,6 +87,7 @@ in
 					startPosition:{List.nth Input.spawnPoints ID}
 					mines:nil
 					enemyFlag: {List.filter Input.flags fun {$ Elem} Elem.color \= Color end}.1
+					speedBoost:false
 					playersState:{InitOtherPlayers 1} % List of tuples that look like: playerState(id:ID position:pt(x:X y:Y) hp:HP mineReload:MineReload gunReload:GunReload flag:Flag) 
 				)
 			}
@@ -115,8 +120,15 @@ in
 			[] dropFlag(?ID ?Flag) then {DropFlag State ID Flag}
 			[] sayFlagTaken(ID Flag) then {SayFlagTaken State ID Flag}
 			[] sayFlagDropped(ID Flag) then {SayFlagDropped State ID Flag}
+
+			%%%%% CUSTOM MESSAGES %%%%% 
 			[] respawn() then {Respawn State}
 			[] sayRespawn(ID) then {SayRespawn State ID}
+			[] saySpeedBoostTaken() then {SaySpeedBoostTaken State}
+			[] saySpeedBoostWoreOff() then {SaySpeedBoostWoreOff State}
+			[] sayAdrenalineTaken() then {SayAdrenalineTaken State}
+			[] sayAdrenalineWoreOff() then {SayAdrenalineWoreOff State}
+			
 
 			[] _ then % if no messages match, instead of crashing we just return the unmodified state
 				{System.show 'Player ID'#State.id#' got an unknown message, ignoring...'} 
@@ -152,6 +164,7 @@ in
 			EnemyBaseTileNbr NewPosMapTileNbr OtherPlayersAtPos NearestMines
 		in
 			if (NewPos.x =< Input.nRow) andthen (NewPos.y =< Input.nColumn) andthen (NewPos.x > 0) andthen (NewPos.y > 0) then
+
 				% get the enemy base tile nbr
 				EnemyBaseTileNbr = if State.id.color == red then 2 else 1 end 
 				% get the new pos tile nbr
@@ -162,7 +175,7 @@ in
 				% check if we will step into a mine
 				NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos NewPos} == 0 end}
 
-				if {ManhattanDistance State.position NewPos} =< 1
+				if {ManhattanDistance State.position NewPos} =< MaxTravelDistance
 					andthen (NewPosMapTileNbr \= 3) 
 						andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) 
 							andthen {List.length OtherPlayersAtPos} == 0 
@@ -177,7 +190,7 @@ in
 			end
 		end
 
-		Pos DX DY
+		Pos DX DY MaxTravelDistance
 	in
 		{SimulatedThinking}
 		ID = State.id
@@ -185,57 +198,58 @@ in
 		Pos = State.position
 
 		% make the player go to the flag if they dont have it, else make them go to the base
+		{System.show 'Player ID'#ID#' State.friendlyHasFlag'#State.friendlyHasFlag}
 		if State.flag == null andthen State.friendlyHasFlag == false then
 			DX = State.enemyFlag.pos.x - Pos.x
 			DY = State.enemyFlag.pos.y - Pos.y	
 		
 		else
 			% make the player go to the base
-		% 	BasePosition
-		% in
-		% 	if State.id.color == red then
-		% 		BasePosition = pt(x:1 y:1)
-		% 	else
-		% 		BasePosition = pt(x:Input.nRow y:Input.nColumn)
-		% 	end
-
-		% 	DX = BasePosition.x - Pos.x
-		% 	DY = BasePosition.y - Pos.y	
-
-			% make the player go to the friendly that is carrying the flag
-			FriendlyWithFlagPos
+			BasePosition
 		in
-			FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null end}.1.position
+			if State.id.color == red then
+				BasePosition = pt(x:1 y:1)
+			else
+				BasePosition = pt(x:Input.nRow y:Input.nColumn)
+			end
 
-			DX = FriendlyWithFlagPos.x - Pos.x
-			DY = FriendlyWithFlagPos.y - Pos.y	
+			DX = BasePosition.x - Pos.x
+			DY = BasePosition.y - Pos.y	
+
+		%	make the player go to the friendly that is carrying the flag
+		% 	FriendlyWithFlagPos
+		% in
+		% 	FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null andthen Elem.id \= State.id andthen Elem.hp > 0 end}.1.position
+
+		% 	DX = FriendlyWithFlagPos.x - Pos.x
+		% 	DY = FriendlyWithFlagPos.y - Pos.y	
 		end
 
-		if DX < 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x - 1}} then
+		MaxTravelDistance = if State.speedBoost == true then 2 else 1 end
 
-			Position = {AdjoinAt Pos x Pos.x - 1}
 
-		elseif DX > 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x + 1}} then
+		if DX < 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x - MaxTravelDistance}} then
 
-			Position = {AdjoinAt Pos x Pos.x + 1}
+			Position = {AdjoinAt Pos x Pos.x - MaxTravelDistance}
 
-		elseif DY < 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y - 1}} then
+		elseif DX > 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x + MaxTravelDistance}} then
 
-			Position = {AdjoinAt Pos y Pos.y - 1}
+			Position = {AdjoinAt Pos x Pos.x + MaxTravelDistance}
 
-		elseif DY > 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y + 1}} then
+		elseif DY < 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y - MaxTravelDistance}} then
 
-			Position = {AdjoinAt Pos y Pos.y + 1}
+			Position = {AdjoinAt Pos y Pos.y - MaxTravelDistance}
+
+		elseif DY > 0 andthen {IsValidMove {AdjoinAt Pos y Pos.y + MaxTravelDistance}} then
+
+			Position = {AdjoinAt Pos y Pos.y + MaxTravelDistance}
 
 		else 
 			NearestMines SafeDirectionX SafeDirectionY
 		in
-			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == 1 end}
+			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == MaxTravelDistance end}
 
 			if {List.length NearestMines} > 0 then
-				% if one of these is 0, you want to get away from that axis
-				% e.g. player is on (3, 3), mine on (2, 3), and flag is on (1, 3): the player wants to go up, but SafeDirectionY will be 0
-				% since it's 0 we will just go left or right on the X axis (while remaining in the map)
 				SafeDirectionX = NearestMines.1.pos.x - Pos.x
 				SafeDirectionY = NearestMines.1.pos.y - Pos.y
 			else
@@ -249,28 +263,28 @@ in
 			case {OS.rand} mod 4
 			of 0 then
 				% avoid mines, we check SafeDirectionX since this random move was going to make the player move up in the X axis
-				if SafeDirectionX == 0 then
-					Position = {AdjoinAt Pos y if Pos.y + 1 == Input.nColumn then Pos.y - 1 else Pos.y + 1 end}
+				if SafeDirectionX \= 0 then
+					Position = {AdjoinAt Pos y if Pos.y + MaxTravelDistance == Input.nColumn then Pos.y - MaxTravelDistance else Pos.y + MaxTravelDistance end}
 				else
-					Position = {AdjoinAt Pos x Pos.x + 1}
+					Position = {AdjoinAt Pos x Pos.x + MaxTravelDistance}
 				end
 			[] 1 then
-				if SafeDirectionX == 0 then
-					Position = {AdjoinAt Pos y if Pos.y + 1 == Input.nColumn then Pos.y - 1 else Pos.y + 1 end}
+				if SafeDirectionX \= 0 then
+					Position = {AdjoinAt Pos y if Pos.y + MaxTravelDistance == Input.nColumn then Pos.y - MaxTravelDistance else Pos.y + MaxTravelDistance end}
 				else
-					Position = {AdjoinAt Pos x Pos.x - 1}
+					Position = {AdjoinAt Pos x Pos.x - MaxTravelDistance}
 				end
 			[] 2 then
-				if SafeDirectionY == 0 then
-					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRow then Pos.x - 1 else Pos.x + 1 end}
+				if SafeDirectionY \= 0 then
+					Position = {AdjoinAt Pos x if Pos.x + MaxTravelDistance == Input.nRow then Pos.x - MaxTravelDistance else Pos.x + MaxTravelDistance end}
 				else
-					Position = {AdjoinAt Pos y Pos.y + 1}
+					Position = {AdjoinAt Pos y Pos.y + MaxTravelDistance}
 				end
 			[] 3 then
-				if SafeDirectionY == 0 then
-					Position = {AdjoinAt Pos x if Pos.x + 1 == Input.nRow then Pos.x - 1 else Pos.x + 1 end}
+				if SafeDirectionY \= 0 then
+					Position = {AdjoinAt Pos x if Pos.x + MaxTravelDistance == Input.nRow then Pos.x - MaxTravelDistance else Pos.x + MaxTravelDistance end}
 				else
-					Position = {AdjoinAt Pos y Pos.y - 1}
+					Position = {AdjoinAt Pos y Pos.y - MaxTravelDistance}
 				end
 			end
 			
@@ -302,21 +316,8 @@ in
 	end
 
 	fun {SayMineExplode State Mine}
-		% removes the mine from the list of mines on the map
-		fun {RemoveMine MineList WantedMine}
-			case MineList
-			of nil then nil
-			[] MineInList|T then
-				if MineInList == WantedMine then
-					T
-				else
-					MineInList|{RemoveMine T WantedMine}
-				end
-			end
-		end
-	in
 		% remove the mine from the mine list
-		{AdjoinAt State mines {RemoveMine State.mines Mine}}
+		{AdjoinAt State mines {List.filter State.mines fun {$ Elem} Elem \= Mine end}}
 	end
 
 	fun {SayFoodAppeared State Food}
@@ -500,6 +501,7 @@ in
 		{SimulatedThinking}
 		ID = State.id
 
+		{System.show 'ID'#ID#'State.enemyFlag'#State.enemyFlag}
 		% try to grab the nearest flag if we are close enough, and also dont pick up a flag already in the base 
 		if State.enemyFlag \= null andthen State.enemyFlag.pos == State.position andthen {GetMapPos State.position.x State.position.y} \= BaseColor then
 			{System.show 'Player ID '#ID#' is trying to grab the flag '#State.enemyFlag}
@@ -605,6 +607,31 @@ in
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
 		else
 			State
+		end
+	end
+
+	fun {SaySpeedBoostTaken State}
+		{AdjoinAt State speedBoost true}
+	end
+
+	fun {SaySpeedBoostWoreOff State}
+		{AdjoinAt State speedBoost false}
+	end
+
+	fun {SayAdrenalineTaken State} 
+		% wrap in try catch to make it work with other groups that might have not defined adrenalineBoostHP (since it's an extension)
+		try
+			{AdjoinAt State hp State.hp+Input.adrenalineBoostHP}
+		catch _ then
+			{AdjoinAt State hp State.hp+2}
+		end
+	end
+
+	fun {SayAdrenalineWoreOff State} 
+		try
+			{AdjoinAt State hp State.hp-Input.adrenalineBoostHP}
+		catch _ then
+			{AdjoinAt State hp State.hp-2}
 		end
 	end
 end

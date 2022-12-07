@@ -20,6 +20,14 @@ export
     respawnDelay:RespawnDelay
     spawnPoints:SpawnPoints
     flags:Flags
+
+    boostsDuration:BoostsDuration
+    adrenalineBoostHP:AdrenalineBoostHP
+    adrenalineDelayMin:AdrenalineDelayMin 
+    adrenalineDelayMax:AdrenalineDelayMax
+
+    speedBoostDelayMin:SpeedBoostDelayMin 
+    speedBoostDelayMax:SpeedBoostDelayMax 
 define
     NRow
     NColumn
@@ -38,6 +46,12 @@ define
     RespawnDelay
     SpawnPoints
     Flags
+    AdrenalineBoostHP
+    AdrenalineDelayMin 
+    AdrenalineDelayMax 
+    SpeedBoostDelayMin
+    SpeedBoostDelayMax
+    BoostsDuration
     GenerateMap
     USE_DEFAULT_MAP
 in
@@ -59,6 +73,8 @@ in
         % these are the bases, dont put any walls in those lists
         RedPlayerBase1 = [1 1 1 0 0 0 0 0 0 0 0 0]
         RedPlayerBase2 = [1 1 1 0 0 0 0 0 0 0 0 0]
+        RedPlayerBaseFlag = [0 0 0 0 0 0 0 0 0 0 3 3]
+        BluePlayerBaseFlag = [3 3 0 0 0 0 0 0 0 0 0 0]
         BluePlayerBase1 = [0 0 0 0 0 0 0 0 0 2 2 2]
         BluePlayerBase2 = [0 0 0 0 0 0 0 0 0 2 2 2]
 
@@ -94,26 +110,39 @@ in
             elseif ListIdx == 2 then
                 RedPlayerBase2|{GenMap 3}
 
+            % dont place walls on the flag line
+            elseif ListIdx == 3 then
+                RedPlayerBaseFlag|{GenMap 4}
+
+            % dont place walls on the flag line
+            elseif ListIdx == 10 then
+                BluePlayerBaseFlag|{GenMap 11}
+
             elseif ListIdx == 11 then
                 BluePlayerBase1|{GenMap 12}
             elseif ListIdx == 12 then
                 BluePlayerBase2|nil
 
             else
-                OutList GenList FlagXForCurrentList FlagsXPos = {List.map Flags fun {$ Elem} Elem.pos.x end} FlagsYPos = {List.map Flags fun {$ Elem} Elem.pos.y end}
-            in
-                GenList = {GenerateTileList 1}
+                {GenerateTileList 1}|{GenMap ListIdx+1}
 
-                % check the the current ListIdx (which represents the X axis) doesn't contain a flag, if it does, FlagXForCurrentList will contain the index of the flag that is in the same X position as the list
-                FlagXForCurrentList = {MemberIdx ListIdx FlagsXPos 1}
+                % GenList OutList FlagXForCurrentList FlagsXPos = {List.map Flags fun {$ Elem} Elem.pos.x end} FlagsYPos = {List.map Flags fun {$ Elem} Elem.pos.y end}
+            % in
 
-                % and if the position where the flag goes has a wall, we will replace that wall with air
-                if FlagXForCurrentList \= false andthen {List.nth GenList FlagXForCurrentList} == 3 then
-                    OutList = {List.mapInd GenList fun {$ Index Elem} if Index == {List.nth FlagsYPos FlagXForCurrentList} then 0 else Elem end end}
-                else
-                    OutList = GenList
-                end
-                OutList|{GenMap ListIdx+1}
+                % this was used to remove any walls from the flag pos, but it didn't always work
+                % TODO: fix
+                % GenList = {GenerateTileList 1}
+                % % check the the current ListIdx (which represents the X axis) doesn't contain a flag, if it does, FlagXForCurrentList will contain the index of the flag that is in the same X position as the list
+                % FlagXForCurrentList = {MemberIdx ListIdx FlagsXPos 1}
+
+                % % and if the position where the flag goes has a wall, we will replace that wall with air
+                % if FlagXForCurrentList \= false andthen {List.nth GenList FlagXForCurrentList} == 3 then
+                %     OutList = {List.mapInd GenList fun {$ Index Elem} if Index == {List.nth FlagsYPos FlagXForCurrentList} then 0 else Elem end end}
+                % else
+                %     OutList = GenList
+                % end
+                % OutList|{GenMap ListIdx+1}
+
             end
         end
     in
@@ -161,8 +190,8 @@ in
 
 %%%% Food apparition parameters %%%%
 
-    FoodDelayMin = 12500 % 25000 by default
-    FoodDelayMax = 15000 % 30000 by default
+    FoodDelayMin = 15000 % 25000 by default
+    FoodDelayMax = 20000 % 30000 by default
 
 %%%% Charges
     GunCharge = 1
@@ -173,6 +202,16 @@ in
 
 %%%% Flags
     Flags = [flag(pos:pt(x:3 y:4) color:red) flag(pos:pt(x:10 y:9) color:blue)]
+
+%%%% Boosts
+    BoostsDuration = 5000 % ms
+    AdrenalineBoostHP = 2
+
+    AdrenalineDelayMin = 15000 
+    AdrenalineDelayMax = 20000 
+
+    SpeedBoostDelayMin = 15000
+    SpeedBoostDelayMax = 20000
 
     % generate the map for this round
    {GenerateMap}
