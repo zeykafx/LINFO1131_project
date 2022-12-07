@@ -473,7 +473,7 @@ in
 		ID = State.id
 
 		% try to grab the nearest flag if we are close enough, and also dont pick up a flag already in the base 
-		if State.enemyFlag \= null andthen State.enemyFlag.pos == State.position andthen {GetMapPos State.enemyFlag.pos.x State.enemyFlag.pos.y} \= BaseColor then
+		if State.enemyFlag \= null andthen State.enemyFlag.pos == State.position andthen {GetMapPos State.position.x State.position.y} \= BaseColor then
 			{System.show 'Player ID '#ID#' is trying to grab the flag '#State.enemyFlag}
 			Flag = State.enemyFlag
 		else
@@ -506,7 +506,7 @@ in
 		OutputState FlagState
 	in
 		% if this player is carrying the flag
-		if ID.id == State.id.id then
+		if ID == State.id then
 			OutputState = {AdjoinAt State flag Flag}
 		
 		else
@@ -518,7 +518,7 @@ in
 
 			% remove the enemy flag from the list since the flag is currently being carried by another player and is therefore not at the original position anymore
 			% TODO: instead of this, make the players target other players whenever State.enemyFlag is null
-			FlagState = {AdjoinAt {AdjoinAt State enemyFlag null} friendlyHasFlag true}
+			FlagState = {AdjoinAt {AdjoinAt OutputState enemyFlag null} friendlyHasFlag true}
 
 		else 
 			% if an enemy is carrying this player's flag
@@ -536,7 +536,7 @@ in
 		end 
 		OutputState FlagState
 	in
-		if ID.id == State.id.id then
+		if ID == State.id then
 			OutputState = {AdjoinAt State flag null}
 		else
 			OutputState = State

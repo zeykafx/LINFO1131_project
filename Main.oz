@@ -137,7 +137,7 @@ in
 				NewPosMapTileNbr = {GetMapPos Position.x Position.y}
 				
 				% check if there are other players at the position that the player wants to go to, if there is, we refuse the move
-				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == Position andthen Elem.id \= CurrentPlayerState.id end}
+				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == Position andthen Elem.id \= CurrentPlayerState.id andthen Elem.hp > 0 end}
 
 				% check that the player isn't moving more than one tile in both directions, and that he isn't moving onto a wall or in the enemy base
 				% {Abs (CurrentPlayerState.position.x - Position.x)} =< 1 andthen {Abs (CurrentPlayerState.position.y - Position.y)} =< 1
@@ -839,7 +839,7 @@ in
 				if Flag \= null then
 					{Send GameControllerPort canGrabFlag(ID Flag Status)}
 					if Status then
-						{SendToAll sayFlagTaken(ID Flag)}
+						{SendToAll sayFlagTaken(PlayerID Flag)}
 						{Send WindowPort removeFlag(Flag)}
 						{Send WindowPort addSoldierHasFlag(ID)}
 					else
