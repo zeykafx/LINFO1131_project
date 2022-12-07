@@ -33,7 +33,7 @@ define
 		{List.nth {List.nth Input.map X} Y}
 	end
 	
-	PRINT_STEPS = true
+	PRINT_STEPS = false
 
 	proc {PrintSteps Whatever}
 		if PRINT_STEPS then
@@ -464,11 +464,31 @@ in
 
 		%%% handles mineExploded(Mine ?Status) messages
 		fun {MineExploded State Mine ?Status}
-			NewState
+			NewState MinesNearby
 		in
-			NewState = {AdjoinAt State playersState {ApplyDmgIfInRange State.playersState Mine.pos}}
+
+			NewState = {AdjoinAt State mines {RemoveMine State.mines Mine}}
+
+			{SendToAll sayMineExplode(Mine)}
+			{Send WindowPort removeMine(Mine)}
+
+			% check for other mines in the vicinity (chain reaction)
+			MinesNearby = {List.filter NewState.mines fun {$ Elem} {ManhattanDistance Mine.pos Elem.pos} == 1 end}
+
+			if {List.length MinesNearby} >= 1 then
+				for I in MinesNearby do
+					thread 
+						{Delay 500} % small delay to make the explosions look like a chain reaction
+						% send a message to the gamecontroller in another thread to ask to make the mines nearby explode
+						{Send GameControllerPort mineExploded(I _)}
+					end
+				end
+			
+			end
+
 			Status = true
-			{AdjoinAt NewState mines {RemoveMine NewState.mines Mine}}
+			{AdjoinAt NewState playersState {ApplyDmgIfInRange NewState.playersState Mine.pos}}
+
 		end
 
 		%%%% Items
@@ -846,9 +866,6 @@ in
 
 							{Send GameControllerPort mineExploded(mine(pos:MinePosition) Status)}
 							{Wait Status}
-
-							{SendToAll sayMineExplode(mine(pos:MinePosition))}
-							{Send WindowPort removeMine(mine(pos:MinePosition))}
 						end
 					end
 

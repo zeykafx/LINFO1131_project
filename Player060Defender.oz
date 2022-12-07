@@ -219,7 +219,7 @@ in
 			NearestMines SafeDirectionX SafeDirectionY
 		in
 			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == 1 end}
-			{System.show 'NearestMines'#NearestMines}
+
 			if {List.length NearestMines} > 0 then
 				% if one of these is 0, you want to get away from that axis
 				% e.g. player is on (3, 3), mine on (2, 3), and flag is on (1, 3): the player wants to go up, but SafeDirectionY will be 0
