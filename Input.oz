@@ -1,4 +1,7 @@
 functor
+import
+    System
+    OS
 export
     nRow:NRow
     nColumn:NColumn
@@ -35,6 +38,8 @@ define
     RespawnDelay
     SpawnPoints
     Flags
+    GenerateMap
+    USE_DEFAULT_MAP
 in
 
 %%%% Description of the map %%%%
@@ -42,23 +47,99 @@ in
     NRow = 12
     NColumn = 12
 
+    % set to true to use the default map
+    USE_DEFAULT_MAP = false
+
     % 0 = Empty
     % 1 = Player 1's base
     % 2 = Player 2's base
     % 3 = Walls
 
-    Map = [[1 1 1 0 0 0 0 0 0 0 0 0]
-	       [1 1 1 0 0 0 0 0 0 0 0 0]
-	       [0 0 0 0 0 0 0 0 0 0 0 0]
-	       [0 0 0 3 3 0 0 3 3 0 0 0]
-	       [0 0 0 3 0 0 0 0 3 0 0 0]
-	       [0 0 0 0 0 0 0 0 0 0 0 0]
-	       [0 0 0 0 0 0 0 0 0 0 0 0]
-	       [0 0 0 3 0 0 0 0 3 0 0 0]
-           [0 0 0 3 3 0 0 3 3 0 0 0]
-           [0 0 0 0 0 0 0 0 0 0 0 0]
-	       [0 0 0 0 0 0 0 0 0 2 2 2]
-	       [0 0 0 0 0 0 0 0 0 2 2 2]]
+    proc {GenerateMap}
+        % these are the bases, dont put any walls in those lists
+        RedPlayerBase1 = [1 1 1 0 0 0 0 0 0 0 0 0]
+        RedPlayerBase2 = [1 1 1 0 0 0 0 0 0 0 0 0]
+        BluePlayerBase1 = [0 0 0 0 0 0 0 0 0 2 2 2]
+        BluePlayerBase2 = [0 0 0 0 0 0 0 0 0 2 2 2]
+
+        % list.member but modified to return the index of the element if it is in the list
+        fun {MemberIdx X Ys Idx}
+            case Ys of nil then false
+            [] Y|Yr then 
+                if X==Y then
+                    Idx
+                else
+                    {MemberIdx X Yr Idx+1}
+                end
+            end
+        end
+
+        % this function is used to generate a list of random times (with more air than walls) 
+        fun {GenerateTileList Idx}
+            if Idx =< 12 then
+                if {OS.rand} mod 10 == 0 then % rarely put walls
+                    3|{GenerateTileList Idx+1}
+                else 
+                    0|{GenerateTileList Idx+1}
+                end
+            else
+                nil
+            end
+        end
+
+        % this function puts the whole map together, it adds the bases, and generate the lists in between the two
+        fun {GenMap ListIdx}
+            if ListIdx == 1 then
+                RedPlayerBase1|{GenMap 2}
+            elseif ListIdx == 2 then
+                RedPlayerBase2|{GenMap 3}
+
+            elseif ListIdx == 11 then
+                BluePlayerBase1|{GenMap 12}
+            elseif ListIdx == 12 then
+                BluePlayerBase2|nil
+
+            else
+                OutList GenList FlagXForCurrentList FlagsXPos = {List.map Flags fun {$ Elem} Elem.pos.x end} FlagsYPos = {List.map Flags fun {$ Elem} Elem.pos.y end}
+            in
+                GenList = {GenerateTileList 1}
+
+                % check the the current ListIdx (which represents the X axis) doesn't contain a flag, if it does, FlagXForCurrentList will contain the index of the flag that is in the same X position as the list
+                FlagXForCurrentList = {MemberIdx ListIdx FlagsXPos 1}
+
+                % and if the position where the flag goes has a wall, we will replace that wall with air
+                if FlagXForCurrentList \= false andthen {List.nth GenList FlagXForCurrentList} == 3 then
+                    OutList = {List.mapInd GenList fun {$ Index Elem} if Index == {List.nth FlagsYPos FlagXForCurrentList} then 0 else Elem end end}
+                else
+                    OutList = GenList
+                end
+                OutList|{GenMap ListIdx+1}
+            end
+        end
+    in
+        if USE_DEFAULT_MAP then
+            {System.show 'Using a the default map'}
+            Map = [
+                [1 1 1 0 0 0 0 0 0 0 0 0]
+                [1 1 1 0 0 0 0 0 0 0 0 0]
+                [0 0 0 0 0 0 0 0 0 0 0 0]
+                [0 0 0 3 3 0 0 3 3 0 0 0]
+                [0 0 0 3 0 0 0 0 3 0 0 0]
+                [0 0 0 0 0 0 0 0 0 0 0 0]
+                [0 0 0 0 0 0 0 0 0 0 0 0]
+                [0 0 0 3 0 0 0 0 3 0 0 0]
+                [0 0 0 3 3 0 0 3 3 0 0 0]
+                [0 0 0 0 0 0 0 0 0 0 0 0]
+                [0 0 0 0 0 0 0 0 0 2 2 2]
+                [0 0 0 0 0 0 0 0 0 2 2 2]
+            ]
+        else
+            {System.show 'Using a randomly generated map'}
+            Map = {GenMap 1}
+        end
+    end
+
+
 
 %%%% Players description %%%%
 
@@ -93,4 +174,6 @@ in
 %%%% Flags
     Flags = [flag(pos:pt(x:3 y:4) color:red) flag(pos:pt(x:10 y:9) color:blue)]
 
+    % generate the map for this round
+   {GenerateMap}
 end
