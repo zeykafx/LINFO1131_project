@@ -173,13 +173,12 @@ in
 				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == NewPos andthen Elem.id \= State.id andthen Elem.hp > 0 end}	
 
 				% check if we will step into a mine
-				NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos NewPos} == 0 end}
+				% NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos NewPos} == 0 end}
 
 				if {ManhattanDistance State.position NewPos} =< MaxTravelDistance
 					andthen (NewPosMapTileNbr \= 3) 
 						andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) 
-							andthen {List.length OtherPlayersAtPos} == 0 
-								andthen {List.length NearestMines} == 0 then
+							andthen {List.length OtherPlayersAtPos} == 0 then % andthen {List.length NearestMines} == 0
 					true
 				else
 					false
@@ -198,7 +197,7 @@ in
 		Pos = State.position
 
 		% make the player go to the flag if they dont have it, else make them go to the base
-		{System.show 'Player ID'#ID#' State.friendlyHasFlag'#State.friendlyHasFlag}
+		% {System.show 'Player ID'#ID#' State.friendlyHasFlag'#State.friendlyHasFlag}
 		if State.flag == null andthen State.friendlyHasFlag == false then
 			DX = State.enemyFlag.pos.x - Pos.x
 			DY = State.enemyFlag.pos.y - Pos.y	
@@ -224,6 +223,8 @@ in
 		% 	DX = FriendlyWithFlagPos.x - Pos.x
 		% 	DY = FriendlyWithFlagPos.y - Pos.y	
 		end
+
+		% {System.show 'ID'#State.id#'DX'#DX#' DY'#DY#' State.enemyFlag'#State.enemyFlag#' pos'#Pos}
 
 		MaxTravelDistance = if State.speedBoost == true then 2 else 1 end
 
@@ -259,7 +260,7 @@ in
 
 
 			% it seems like we are stuck....
-			% try to move in a random direction, with, doesn't matter if it's not valid, we'll try again next round, and again, until we're not stuck anymore
+			% try to move in a random direction, it doesn't matter if it's not valid, we'll try again next round, and again, until we're not stuck anymore
 			case {OS.rand} mod 4
 			of 0 then
 				% avoid mines, we check SafeDirectionX since this random move was going to make the player move up in the X axis
@@ -501,7 +502,6 @@ in
 		{SimulatedThinking}
 		ID = State.id
 
-		{System.show 'ID'#ID#'State.enemyFlag'#State.enemyFlag}
 		% try to grab the nearest flag if we are close enough, and also dont pick up a flag already in the base 
 		if State.enemyFlag \= null andthen State.enemyFlag.pos == State.position andthen {GetMapPos State.position.x State.position.y} \= BaseColor then
 			{System.show 'Player ID '#ID#' is trying to grab the flag '#State.enemyFlag}

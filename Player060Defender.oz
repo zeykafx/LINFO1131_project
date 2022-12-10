@@ -244,7 +244,7 @@ in
 
 
 			% it seems like we are stuck....
-			% try to move in a random direction, with, doesn't matter if it's not valid, we'll try again next round, and again, until we're not stuck anymore
+			% try to move in a random direction, it doesn't matter if it's not valid, we'll try again next round, and again, until we're not stuck anymore
 			case {OS.rand} mod 4
 			of 0 then
 				% avoid mines, we check SafeDirectionX since this random move was going to make the player move up in the X axis

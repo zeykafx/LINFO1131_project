@@ -90,7 +90,7 @@ in
             end
         end
 
-        % this function is used to generate a list of random times (with more air than walls) 
+        % this function is used to generate a list of random tiles (with more empty tiles than walls) 
         fun {GenerateTileList Idx}
             if Idx =< 12 then
                 if {OS.rand} mod 10 == 0 then % rarely put walls
@@ -103,7 +103,7 @@ in
             end
         end
 
-        % this function puts the whole map together, it adds the bases, and generate the lists in between the two
+        % this function puts the whole map together, it adds the bases, and generates the lists in between the two
         fun {GenMap ListIdx}
             if ListIdx == 1 then
                 RedPlayerBase1|{GenMap 2}

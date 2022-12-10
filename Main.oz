@@ -5,6 +5,7 @@ import
 	PlayerManager
 	System
 	OS
+	Application
 define
 	StartGameController
 	TreatGameControllerStream
@@ -145,7 +146,8 @@ in
 				NewPosMapTileNbr = {GetMapPos Position.x Position.y}
 				
 				% check if there are other players at the position that the player wants to go to, if there is, we refuse the move
-				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == Position andthen Elem.id \= CurrentPlayerState.id andthen Elem.hp > 0 end}
+				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == Position andthen Elem.id.id \= CurrentPlayerState.id.id andthen Elem.hp > 0 end}
+
 
 				% check that the player isn't moving more than MaxTravelDistance tile in both directions, and that he isn't moving onto a wall or in the enemy base
 				% {Abs (CurrentPlayerState.position.x - Position.x)} =< 1 andthen {Abs (CurrentPlayerState.position.y - Position.y)} =< 1
@@ -156,7 +158,7 @@ in
 					Status = true
 
 				else
-					{System.show 'INVALID MOVE '#ID#' player wanted to move from'#CurrentPlayerState.position#' to '#Position}
+					{System.show 'INVALID MOVE '#ID#' player wanted to move from'#CurrentPlayerState.position#' to '#Position#' Position had these players on it '#OtherPlayersAtPos# ' and was of tile nbr '#NewPosMapTileNbr}
 					NewState = State
 					Status = false
 				end
@@ -273,7 +275,30 @@ in
 				Status = true
 				playerState(id:LocalID position:Position hp:HP mineReload:MineReload gunReload:GunReload flag:null speedBoost:SpeedBoost)
 			end
+
+			InBase
 		in
+			if ID.color == red then
+				% BasePosition = pt(x:1 y:1)
+				if Flag.pos.x =< 2 andthen Flag.pos.y =< 3 then
+					InBase = true
+				else
+					InBase = false
+				end
+			else
+				if Flag.pos.x >= 11 andthen Flag.pos.y >= 10 then
+					InBase = true
+				else
+					InBase = false
+				end
+			end
+
+			if InBase then
+				{System.show 'TEAM '#ID.color#' WON THE GAME'}
+				thread {Delay 100} {Application.exit} end % its not ideal to just close the app like this when a team wins but it'll have to do
+			else
+				skip
+			end
 			{AdjoinAt {AdjoinAt State flags Flag|State.flags} playersState {PlayerStateModification State.playersState ID ModFlag}}
 		end
 
