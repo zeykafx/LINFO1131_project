@@ -34,7 +34,7 @@ define
 		{List.nth {List.nth Input.map X} Y}
 	end
 	
-	PRINT_STEPS = false
+	PRINT_STEPS = true
 
 	proc {PrintSteps Whatever}
 		if PRINT_STEPS then

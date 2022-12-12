@@ -6,10 +6,6 @@ import
 export
 	portPlayer:StartPlayer
 define
-	% Vars
-	MapWidth = {List.length Input.map}
-    MapHeight = {List.length Input.map.1}
-
 	% Functions
 	StartPlayer
 	TreatStream
@@ -41,9 +37,6 @@ define
 	SaySpeedBoostWoreOff
 	SayAdrenalineTaken 
 	SayAdrenalineWoreOff
-
-	% Helper functions
-	RandomInRange = fun {$ Min Max} Min+({OS.rand}mod(Max-Min+1)) end
 
 	SimulatedThinking = proc{$} {Delay ({OS.rand} mod (Input.thinkMax - Input.thinkMin) + Input.thinkMin)} end
 

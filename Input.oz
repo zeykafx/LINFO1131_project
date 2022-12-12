@@ -73,8 +73,8 @@ in
         % these are the bases, dont put any walls in those lists
         RedPlayerBase1 = [1 1 1 0 0 0 0 0 0 0 0 0]
         RedPlayerBase2 = [1 1 1 0 0 0 0 0 0 0 0 0]
-        RedPlayerBaseFlag = [0 0 0 0 0 0 0 0 0 0 3 3]
-        BluePlayerBaseFlag = [3 3 0 0 0 0 0 0 0 0 0 0]
+        RedPlayerBaseFlag = [0 0 0 0 0 0 0 0 0 0 0 3]
+        BluePlayerBaseFlag = [3 0 0 0 0 0 0 0 0 0 0 0]
         BluePlayerBase1 = [0 0 0 0 0 0 0 0 0 2 2 2]
         BluePlayerBase2 = [0 0 0 0 0 0 0 0 0 2 2 2]
 
@@ -93,7 +93,7 @@ in
         % this function is used to generate a list of random tiles (with more empty tiles than walls) 
         fun {GenerateTileList Idx}
             if Idx =< 12 then
-                if {OS.rand} mod 11 == 0 then % rarely put walls
+                if {OS.rand} mod 10 == 0 then % rarely put walls
                     3|{GenerateTileList Idx+1}
                 else 
                     0|{GenerateTileList Idx+1}
