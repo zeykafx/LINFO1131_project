@@ -198,7 +198,6 @@ in
 		Pos = State.position
 
 		% make the player go to the flag if they dont have it, else make them go to the base
-		% {System.show 'Player ID'#ID#' State.friendlyHasFlag'#State.friendlyHasFlag}
 		if State.flag == null andthen State.friendlyHasFlag == false then
 			DX = State.enemyFlag.pos.x - Pos.x
 			DY = State.enemyFlag.pos.y - Pos.y	
@@ -215,29 +214,6 @@ in
 
 			DX = BasePosition.x - Pos.x
 			DY = BasePosition.y - Pos.y	
-		% 	% make the player go to the friendly that is carrying the flag
-		% 	FriendlyWithFlag FriendlyWithFlagPos
-		% in
-		% 	FriendlyWithFlag = {List.filter State.playersState fun {$ Elem} Elem.flag \= null andthen Elem.id.color == State.id.color andthen Elem.id.id \= State.id.id andthen Elem.hp > 0 end}
-
-			% if {List.length FriendlyWithFlag} == 0 andthen State.flag \= null then
-			% 	% this player has the flag, so make him go to the base
-			% 	BasePosition
-			% in
-			% 	if State.id.color == red then
-			% 		BasePosition = pt(x:1 y:1)
-			% 	else
-			% 		BasePosition = pt(x:Input.nRow y:Input.nColumn)
-			% 	end
-
-			% 	DX = BasePosition.x - Pos.x
-			% 	DY = BasePosition.y - Pos.y	
-			% else
-			% 	FriendlyWithFlagPos = FriendlyWithFlag.1.position
-			% 	DX = FriendlyWithFlagPos.x - Pos.x + ({OS.rand} mod 3) % the OS.rand is there to stop the allies from blocking the player carrying the flag
-			% 	DY = FriendlyWithFlagPos.y - Pos.y + ({OS.rand} mod 3)	
-			% end
-
 		end
 
 		MaxTravelDistance = if State.speedBoost == true then 2 else 1 end

@@ -214,13 +214,6 @@ in
 
 			DX = BasePosition.x - Pos.x
 			DY = BasePosition.y - Pos.y	
-		% 	% make the player go to the friendly that is carrying the flag
-		% 	FriendlyWithFlagPos
-		% in
-		% 	FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null andthen Elem.id \= State.id andthen Elem.hp > 0 end}.1.position
-
-		% 	DX = FriendlyWithFlagPos.x - Pos.x + ({OS.rand} mod 3) % added OS.rand to keep the player around the ally with the flag but not block it
-		% 	DY = FriendlyWithFlagPos.y - Pos.y + ({OS.rand} mod 3)
 		end
 
 		if DX < 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x - MaxTravelDistance}} then
@@ -252,10 +245,7 @@ in
 					WallFreeDirection = NewCoord
 				end
 			end
-			{System.show 'ID'#State.id#' current pos'#Pos#' New Pos '#WallFreeDirection}
 			
-			
-			% Position = WallFreeDirection
 
 			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == MaxTravelDistance end}
 
