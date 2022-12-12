@@ -93,7 +93,7 @@ in
         % this function is used to generate a list of random tiles (with more empty tiles than walls) 
         fun {GenerateTileList Idx}
             if Idx =< 12 then
-                if {OS.rand} mod 10 == 0 then % rarely put walls
+                if {OS.rand} mod 11 == 0 then % rarely put walls
                     3|{GenerateTileList Idx+1}
                 else 
                     0|{GenerateTileList Idx+1}
@@ -125,24 +125,6 @@ in
 
             else
                 {GenerateTileList 1}|{GenMap ListIdx+1}
-
-                % GenList OutList FlagXForCurrentList FlagsXPos = {List.map Flags fun {$ Elem} Elem.pos.x end} FlagsYPos = {List.map Flags fun {$ Elem} Elem.pos.y end}
-            % in
-
-                % this was used to remove any walls from the flag pos, but it didn't always work
-                % TODO: fix
-                % GenList = {GenerateTileList 1}
-                % % check the the current ListIdx (which represents the X axis) doesn't contain a flag, if it does, FlagXForCurrentList will contain the index of the flag that is in the same X position as the list
-                % FlagXForCurrentList = {MemberIdx ListIdx FlagsXPos 1}
-
-                % % and if the position where the flag goes has a wall, we will replace that wall with air
-                % if FlagXForCurrentList \= false andthen {List.nth GenList FlagXForCurrentList} == 3 then
-                %     OutList = {List.mapInd GenList fun {$ Index Elem} if Index == {List.nth FlagsYPos FlagXForCurrentList} then 0 else Elem end end}
-                % else
-                %     OutList = GenList
-                % end
-                % OutList|{GenMap ListIdx+1}
-
             end
         end
     in
@@ -185,13 +167,13 @@ in
 
 %%%% Thinking parameters %%%%
 
-    ThinkMin = 200 % 450 by default
-    ThinkMax = 250 % 500 by default
+    ThinkMin = 100 % 450 by default
+    ThinkMax = 150 % 500 by default
 
 %%%% Food apparition parameters %%%%
 
-    FoodDelayMin = 15000 % 25000 by default
-    FoodDelayMax = 20000 % 30000 by default
+    FoodDelayMin = 5000 % 25000 by default
+    FoodDelayMax = 12000 % 30000 by default
 
 %%%% Charges
     GunCharge = 1
@@ -207,11 +189,11 @@ in
     BoostsDuration = 5000 % ms
     AdrenalineBoostHP = 2
 
-    AdrenalineDelayMin = 15000 
-    AdrenalineDelayMax = 20000 
+    AdrenalineDelayMin = 5000 
+    AdrenalineDelayMax = 12000 
 
-    SpeedBoostDelayMin = 15000
-    SpeedBoostDelayMax = 20000
+    SpeedBoostDelayMin = 5000
+    SpeedBoostDelayMax = 12000
 
     % generate the map for this round
    {GenerateMap}

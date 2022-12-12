@@ -173,12 +173,13 @@ in
 				OtherPlayersAtPos = {List.filter State.playersState fun {$ Elem} Elem.position == NewPos andthen Elem.id \= State.id andthen Elem.hp > 0 end}	
 
 				% check if we will step into a mine
-				% NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos NewPos} == 0 end}
+				NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos NewPos} == 0 end}
 
 				if {ManhattanDistance State.position NewPos} =< MaxTravelDistance
 					andthen (NewPosMapTileNbr \= 3) 
 						andthen (NewPosMapTileNbr \= EnemyBaseTileNbr) 
-							andthen {List.length OtherPlayersAtPos} == 0 then % andthen {List.length NearestMines} == 0
+							andthen {List.length OtherPlayersAtPos} == 0
+								andthen {List.length NearestMines} == 0 then
 					true
 				else
 					false
@@ -214,17 +215,30 @@ in
 
 			DX = BasePosition.x - Pos.x
 			DY = BasePosition.y - Pos.y	
-
-		%	make the player go to the friendly that is carrying the flag
-		% 	FriendlyWithFlagPos
+		% 	% make the player go to the friendly that is carrying the flag
+		% 	FriendlyWithFlag FriendlyWithFlagPos
 		% in
-		% 	FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null andthen Elem.id \= State.id andthen Elem.hp > 0 end}.1.position
+		% 	FriendlyWithFlag = {List.filter State.playersState fun {$ Elem} Elem.flag \= null andthen Elem.id.color == State.id.color andthen Elem.id.id \= State.id.id andthen Elem.hp > 0 end}
 
-		% 	DX = FriendlyWithFlagPos.x - Pos.x
-		% 	DY = FriendlyWithFlagPos.y - Pos.y	
+			% if {List.length FriendlyWithFlag} == 0 andthen State.flag \= null then
+			% 	% this player has the flag, so make him go to the base
+			% 	BasePosition
+			% in
+			% 	if State.id.color == red then
+			% 		BasePosition = pt(x:1 y:1)
+			% 	else
+			% 		BasePosition = pt(x:Input.nRow y:Input.nColumn)
+			% 	end
+
+			% 	DX = BasePosition.x - Pos.x
+			% 	DY = BasePosition.y - Pos.y	
+			% else
+			% 	FriendlyWithFlagPos = FriendlyWithFlag.1.position
+			% 	DX = FriendlyWithFlagPos.x - Pos.x + ({OS.rand} mod 3) % the OS.rand is there to stop the allies from blocking the player carrying the flag
+			% 	DY = FriendlyWithFlagPos.y - Pos.y + ({OS.rand} mod 3)	
+			% end
+
 		end
-
-		% {System.show 'ID'#State.id#'DX'#DX#' DY'#DY#' State.enemyFlag'#State.enemyFlag#' pos'#Pos}
 
 		MaxTravelDistance = if State.speedBoost == true then 2 else 1 end
 
@@ -246,16 +260,28 @@ in
 			Position = {AdjoinAt Pos y Pos.y + MaxTravelDistance}
 
 		else 
-			NearestMines SafeDirectionX SafeDirectionY
+			NearestMines SafeDirectionX SafeDirectionY 
+			WallFreeDirection Directions = [dir(x:1 y:0) dir(x:0 y:1) dir(x:~1 y:0) dir(x:0 y:~1)]
 		in
+
+			for Dir in Directions do
+				NewCoord
+			in
+				NewCoord = pt(x:{Max {Min (Pos.x + Dir.x) Input.nRow} 1} y:{Max {Min (Pos.y + Dir.y) Input.nColumn} 1})
+				% {IsValidMove NewCoord} andthen 
+				if {GetMapPos NewCoord.x NewCoord.y} \= 3 andthen {Not {IsDet WallFreeDirection}} then
+					WallFreeDirection = NewCoord
+				end
+			end
+
 			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == MaxTravelDistance end}
 
 			if {List.length NearestMines} > 0 then
 				SafeDirectionX = NearestMines.1.pos.x - Pos.x
 				SafeDirectionY = NearestMines.1.pos.y - Pos.y
 			else
-				SafeDirectionX = 1
-				SafeDirectionY = 1
+				SafeDirectionX = WallFreeDirection.x - Pos.x
+				SafeDirectionY = WallFreeDirection.y - Pos.y
 			end
 
 
@@ -288,7 +314,7 @@ in
 					Position = {AdjoinAt Pos y Pos.y - MaxTravelDistance}
 				end
 			end
-			
+
 		end
 
 
@@ -317,8 +343,7 @@ in
 	end
 
 	fun {SayMineExplode State Mine}
-		% remove the mine from the mine list
-		{AdjoinAt State mines {List.filter State.mines fun {$ Elem} Elem \= Mine end}}
+		{AdjoinAt State mines {List.filter State.mines fun {$ Elem} Elem.pos \= Mine.pos end}}
 	end
 
 	fun {SayFoodAppeared State Food}
@@ -343,14 +368,13 @@ in
 		{AdjoinAt OutputState playersState {PlayerStateModification OutputState.playersState ID ModHp}}
 	end
 
+	% has custom attacker logic
 	fun {ChargeItem State ?ID ?Kind} 
 		{SimulatedThinking}
 
 		ID = State.id
 		if State.gunReloads < Input.gunCharge then
 			Kind = gun
-		elseif State.mineReloads < Input.mineCharge then
-			Kind = mine
 		else
 			Kind = null
 		end
@@ -546,11 +570,8 @@ in
 
 		% if a teammate is carrying the flag
 		if ID.color == State.id.color then 
-
 			% remove the enemy flag from the list since the flag is currently being carried by another player and is therefore not at the original position anymore
-			% TODO: instead of this, make the players target other players whenever State.enemyFlag is null
 			FlagState = {AdjoinAt {AdjoinAt OutputState enemyFlag null} friendlyHasFlag true}
-
 		else 
 			% if an enemy is carrying this player's flag
 			FlagState = OutputState 
@@ -619,7 +640,7 @@ in
 	end
 
 	fun {SayAdrenalineTaken State} 
-		% wrap in try catch to make it work with other groups that might have not defined adrenalineBoostHP (since it's an extension)
+		% wrap the use of the custom variable in a try catch block to make it work with other groups that might have not defined adrenalineBoostHP (since it's an extension)
 		try
 			{AdjoinAt State hp State.hp+Input.adrenalineBoostHP}
 		catch _ then

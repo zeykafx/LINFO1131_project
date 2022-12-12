@@ -279,7 +279,6 @@ in
 			InBase
 		in
 			if ID.color == red then
-				% BasePosition = pt(x:1 y:1)
 				if Flag.pos.x =< 2 andthen Flag.pos.y =< 3 then
 					InBase = true
 				else
@@ -295,7 +294,7 @@ in
 
 			if InBase then
 				{System.show 'TEAM '#ID.color#' WON THE GAME'}
-				thread {Delay 100} {Application.exit} end % its not ideal to just close the app like this when a team wins but it'll have to do
+				thread {Delay 50} {Application.exit 0} end % its not ideal to just close the app like this when a team wins but it'll have to do
 			else
 				skip
 			end
@@ -638,7 +637,6 @@ in
 		fun {MineExploded State Mine ?Status}
 			NewState MinesNearby
 		in
-
 			NewState = {AdjoinAt State mines {List.filter State.mines fun {$ Elem} Elem \= Mine end}}
 
 			{SendToAll sayMineExplode(Mine)}
@@ -769,9 +767,9 @@ in
 
 							% remove the mine that exploded 
 							DmgState = {AdjoinAt State mines {List.filter State.mines fun {$ Elem} Elem \= {List.nth State.mines Index} end}}
-
-							{SendToAll sayMineExplode(FiredItem)}
-							{Send WindowPort removeMine(FiredItem)}
+							
+							{SendToAll sayMineExplode(mine(pos:MinePosition))}
+							{Send WindowPort removeMine(mine(pos:MinePosition))}
 
 							% check for other mines in the vicinity (chain reaction)
 							MinesNearby = {List.filter DmgState.mines fun {$ Elem} {ManhattanDistance MinePosition Elem.pos} == 1 end}

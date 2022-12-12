@@ -203,13 +203,24 @@ in
 			DY = State.friendyFlag.pos.y - Pos.y	
 		
 		else
-			% make the player go to the friendly that is carrying the flag
-			FriendlyWithFlagPos
+			% make the player go to the base
+			BasePosition
 		in
-			FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null andthen Elem.id \= State.id andthen Elem.hp > 0 end}.1.position
+			if State.id.color == red then
+				BasePosition = pt(x:1 y:1)
+			else
+				BasePosition = pt(x:Input.nRow y:Input.nColumn)
+			end
 
-			DX = FriendlyWithFlagPos.x - Pos.x
-			DY = FriendlyWithFlagPos.y - Pos.y	
+			DX = BasePosition.x - Pos.x
+			DY = BasePosition.y - Pos.y	
+		% 	% make the player go to the friendly that is carrying the flag
+		% 	FriendlyWithFlagPos
+		% in
+		% 	FriendlyWithFlagPos = {List.filter State.playersState fun {$ Elem} Elem.flag \= null andthen Elem.id \= State.id andthen Elem.hp > 0 end}.1.position
+
+		% 	DX = FriendlyWithFlagPos.x - Pos.x + ({OS.rand} mod 3) % added OS.rand to keep the player around the ally with the flag but not block it
+		% 	DY = FriendlyWithFlagPos.y - Pos.y + ({OS.rand} mod 3)
 		end
 
 		if DX < 0 andthen {IsValidMove {AdjoinAt Pos x Pos.x - MaxTravelDistance}} then
@@ -230,7 +241,22 @@ in
 
 		else 
 			NearestMines SafeDirectionX SafeDirectionY
+			WallFreeDirection Directions = [dir(x:1 y:0) dir(x:0 y:1) dir(x:~1 y:0) dir(x:0 y:~1)]
 		in
+
+			for Dir in Directions do
+				NewCoord
+			in
+				NewCoord = pt(x:(Pos.x + Dir.x) y:(Pos.y + Dir.y))
+				if {IsValidMove NewCoord} andthen {Not {IsDet WallFreeDirection}} then
+					WallFreeDirection = NewCoord
+				end
+			end
+			{System.show 'ID'#State.id#' current pos'#Pos#' New Pos '#WallFreeDirection}
+			
+			
+			% Position = WallFreeDirection
+
 			NearestMines = {List.filter State.mines fun {$ Mine} {ManhattanDistance Mine.pos Pos} == MaxTravelDistance end}
 
 
@@ -238,10 +264,9 @@ in
 				SafeDirectionX = NearestMines.1.pos.x - Pos.x
 				SafeDirectionY = NearestMines.1.pos.y - Pos.y
 			else
-				SafeDirectionX = 1
-				SafeDirectionY = 1
+				SafeDirectionX = WallFreeDirection.x - Pos.x
+				SafeDirectionY = WallFreeDirection.y - Pos.y
 			end
-
 
 			% it seems like we are stuck....
 			% try to move in a random direction, it doesn't matter if it's not valid, we'll try again next round, and again, until we're not stuck anymore
@@ -301,21 +326,7 @@ in
 	end
 
 	fun {SayMineExplode State Mine}
-		% removes the mine from the list of mines on the map
-		fun {RemoveMine MineList WantedMine}
-			case MineList
-			of nil then nil
-			[] MineInList|T then
-				if MineInList == WantedMine then
-					T
-				else
-					MineInList|{RemoveMine T WantedMine}
-				end
-			end
-		end
-	in
-		% remove the mine from the mine list
-		{AdjoinAt State mines {RemoveMine State.mines Mine}}
+		{AdjoinAt State mines {List.filter State.mines fun {$ Elem} Elem.pos \= Mine.pos end}}
 	end
 
 	fun {SayFoodAppeared State Food}
@@ -585,7 +596,7 @@ in
 			playerState(id:ID position:NewPos hp:Input.startHealth mineReload:MineReload gunReload:GunReload flag:Flag)
 		end 
 	in
-		if ID \= State.id then
+		if ID.id \= State.id.id then
 			{AdjoinAt State playersState {PlayerStateModification State.playersState ID ModHp}}
 		else
 			State
